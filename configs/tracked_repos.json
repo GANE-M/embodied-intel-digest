@@ -1,0 +1,74 @@
+[
+  {
+    "repo": "ros2/ros2",
+    "enabled": true,
+    "priority": 0.9,
+    "category": "open_source"
+  },
+  {
+    "repo": "facebookresearch/habitat-sim",
+    "enabled": true,
+    "priority": 1.0,
+    "category": "research"
+  },
+  {
+    "repo": "facebookresearch/habitat-lab",
+    "enabled": true,
+    "priority": 1.0,
+    "category": "research"
+  },
+  {
+    "repo": "openai/roboschool",
+    "enabled": false,
+    "priority": 0.5,
+    "category": "research"
+  },
+  {
+    "repo": "google-research/google-research",
+    "enabled": true,
+    "priority": 0.85,
+    "category": "research"
+  },
+  {
+    "repo": "pytorch/pytorch",
+    "enabled": true,
+    "priority": 0.7,
+    "category": "tooling"
+  },
+  {
+    "repo": "NVIDIA-Omniverse/IsaacSim",
+    "enabled": true,
+    "priority": 1.05,
+    "category": "research"
+  },
+  {
+    "repo": "microsoft/AirSim",
+    "enabled": true,
+    "priority": 0.95,
+    "category": "research"
+  },
+  {
+    "repo": "MuJoCo/mujoco",
+    "enabled": true,
+    "priority": 0.92,
+    "category": "tooling"
+  },
+  {
+    "repo": "ros-planning/navigation2",
+    "enabled": true,
+    "priority": 0.88,
+    "category": "open_source"
+  },
+  {
+    "repo": "opencv/opencv",
+    "enabled": true,
+    "priority": 0.65,
+    "category": "tooling"
+  },
+  {
+    "repo": "tensorflow/tensorflow",
+    "enabled": false,
+    "priority": 0.6,
+    "category": "tooling"
+  }
+]

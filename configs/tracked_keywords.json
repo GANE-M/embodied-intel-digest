@@ -1,0 +1,142 @@
+[
+  {
+    "pattern": "embodied ai",
+    "match_type": "literal",
+    "weight": 1.0,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "embodied\\s+(ai|intelligence|agent)",
+    "match_type": "regex",
+    "weight": 1.0,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "humanoid",
+    "match_type": "literal",
+    "weight": 0.95,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "humanoid\\s+robot",
+    "match_type": "regex",
+    "weight": 0.9,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "manipulation",
+    "match_type": "literal",
+    "weight": 0.85,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "dexterous\\s+manipulation",
+    "match_type": "regex",
+    "weight": 0.88,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "tactile",
+    "match_type": "literal",
+    "weight": 0.75,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "tactile\\s+sensing",
+    "match_type": "regex",
+    "weight": 0.78,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "teleoperation",
+    "match_type": "literal",
+    "weight": 0.72,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "bilateral\\s+teleoperation",
+    "match_type": "regex",
+    "weight": 0.74,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "robot learning",
+    "match_type": "literal",
+    "weight": 0.9,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "imitation\\s+learning",
+    "match_type": "regex",
+    "weight": 0.82,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "reinforcement learning",
+    "match_type": "literal",
+    "weight": 0.8,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "locomotion",
+    "match_type": "literal",
+    "weight": 0.7,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "legged robot",
+    "match_type": "literal",
+    "weight": 0.73,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "sim(-to-real|2real)",
+    "match_type": "regex",
+    "weight": 0.76,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "whole-body control",
+    "match_type": "literal",
+    "weight": 0.71,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "VLA",
+    "match_type": "literal",
+    "weight": 0.65,
+    "case_sensitive": true,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "vision-language-action",
+    "match_type": "literal",
+    "weight": 0.68,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "diffusion policy",
+    "match_type": "literal",
+    "weight": 0.77,
+    "case_sensitive": false,
+    "category_hint": "research"
+  }
+]

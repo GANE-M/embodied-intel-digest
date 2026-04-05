@@ -1,0 +1,50 @@
+[
+  {
+    "name": "RSS 2025",
+    "url": "https://roboticsconference.org/",
+    "category": "conference",
+    "enabled": true
+  },
+  {
+    "name": "CoRL 2025",
+    "url": "https://www.corl.org/",
+    "category": "conference",
+    "enabled": true
+  },
+  {
+    "name": "ICRA 2025",
+    "url": "https://www.icra2025.org/",
+    "category": "conference",
+    "enabled": true
+  },
+  {
+    "name": "NVIDIA GTC",
+    "url": "https://www.nvidia.com/gtc/",
+    "category": "summit",
+    "enabled": true
+  },
+  {
+    "name": "Humanoids Symposium",
+    "url": "https://www.humanoids.ws/",
+    "category": "conference",
+    "enabled": false
+  },
+  {
+    "name": "ROSCon",
+    "url": "https://roscon.ros.org/",
+    "category": "community_event",
+    "enabled": true
+  },
+  {
+    "name": "NeurIPS",
+    "url": "https://neurips.cc/",
+    "category": "conference",
+    "enabled": true
+  },
+  {
+    "name": "Product demo placeholder",
+    "url": "https://example.com/product-launch",
+    "category": "product_launch",
+    "enabled": false
+  }
+]

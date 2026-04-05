@@ -1,0 +1,74 @@
+[
+  {
+    "name": "arXiv cs.RO",
+    "url": "https://arxiv.org/rss/cs.RO",
+    "category": "research",
+    "enabled": true
+  },
+  {
+    "name": "arXiv cs.LG",
+    "url": "https://arxiv.org/rss/cs.LG",
+    "category": "research",
+    "enabled": true
+  },
+  {
+    "name": "Google AI Blog",
+    "url": "https://blog.google/technology/ai/rss/index.xml",
+    "category": "company",
+    "enabled": true
+  },
+  {
+    "name": "NVIDIA Blog",
+    "url": "https://blogs.nvidia.com/feed/",
+    "category": "company",
+    "enabled": true
+  },
+  {
+    "name": "MIT Technology Review",
+    "url": "https://www.technologyreview.com/feed/",
+    "category": "media",
+    "enabled": true
+  },
+  {
+    "name": "IEEE Spectrum",
+    "url": "https://spectrum.ieee.org/rss/fulltext",
+    "category": "media",
+    "enabled": true
+  },
+  {
+    "name": "OpenAI News",
+    "url": "https://openai.com/blog/rss.xml",
+    "category": "company",
+    "enabled": true
+  },
+  {
+    "name": "DeepMind Blog",
+    "url": "https://deepmind.google/blog/rss.xml",
+    "category": "company",
+    "enabled": true
+  },
+  {
+    "name": "ROS Discourse News",
+    "url": "https://discourse.ros.org/posts.rss",
+    "category": "research",
+    "enabled": true
+  },
+  {
+    "name": "Robotics Tomorrow",
+    "url": "https://www.roboticstomorrow.com/rss.php",
+    "category": "media",
+    "enabled": false
+  },
+  {
+    "name": "Unity Blog",
+    "url": "https://blog.unity.com/topic/robotics/rss.xml",
+    "category": "research",
+    "enabled": false
+  },
+  {
+    "name": "Stanford HAI",
+    "url": "https://hai.stanford.edu/news/rss.xml",
+    "category": "research",
+    "enabled": true
+  }
+]

@@ -1,0 +1,49 @@
+"""Within-run dedupe + cross-run unseen filter (no store writes here) (v1.4)."""
+
+from __future__ import annotations
+
+from app.models import ProcessedItem, RawItem
+from app.storage.base import BaseStore
+from app.utils.hash_utils import make_dedupe_id, stable_hash
+
+
+def build_dedupe_key(item: RawItem | ProcessedItem) -> str:
+    did = (item.dedupe_id or "").strip()
+    if did:
+        return did
+    url = (item.url or "").strip()
+    title = (item.title or "").strip()
+    if url or title:
+        return stable_hash(url, title)
+    return make_dedupe_id(
+        item.source_type,
+        item.external_id,
+        item.url,
+        item.title,
+    )
+
+
+def dedupe_items(items: list[ProcessedItem]) -> list[ProcessedItem]:
+    best: dict[str, ProcessedItem] = {}
+    for it in items:
+        key = build_dedupe_key(it)
+        prev = best.get(key)
+        if prev is None:
+            it.is_update = False
+            best[key] = it
+            continue
+        replace = it.final_score > prev.final_score or (
+            it.final_score == prev.final_score and it.published_at > prev.published_at
+        )
+        if replace:
+            it.is_update = True
+            best[key] = it
+    return list(best.values())
+
+
+def filter_unseen_items(items: list[ProcessedItem], store: BaseStore) -> list[ProcessedItem]:
+    return [it for it in items if it.dedupe_id and not store.has_seen(it.dedupe_id)]
+
+
+def filter_new_items(items: list[ProcessedItem], store: BaseStore) -> list[ProcessedItem]:
+    return filter_unseen_items(items, store)
