@@ -33,6 +33,8 @@ class AppConfig:
     state_dir: Path | None
     database_url: str | None
     configs_dir: Path
+    min_final_score: float
+    require_keyword_or_entity_hit: bool
 
 
 def _parse_state_dir(raw: str | None) -> Path | None:
@@ -64,6 +66,13 @@ def load_config() -> AppConfig:
     if not str(llm_url or "").strip():
         llm_url = None
 
+    min_final = float(os.getenv("MIN_FINAL_SCORE", str(constants.DEFAULT_MIN_FINAL_SCORE)))
+    require_hit = (os.getenv("REQUIRE_KEYWORD_OR_ENTITY_HIT", "false") or "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
     cfg = AppConfig(
         email_to=os.getenv("EMAIL_TO", ""),
         email_from=os.getenv("EMAIL_FROM", ""),
@@ -86,6 +95,8 @@ def load_config() -> AppConfig:
         state_dir=state_dir,
         database_url=os.getenv("DATABASE_URL") or None,
         configs_dir=configs_dir,
+        min_final_score=min(1.0, max(0.0, min_final)),
+        require_keyword_or_entity_hit=require_hit,
     )
     return cfg
 
@@ -138,7 +149,17 @@ def load_keyword_rules(configs_dir: Path) -> list[KeywordRule]:
             if mt not in ("literal", "regex"):
                 mt = "literal"
             weight = float(row.get("weight", 1.0))
-            out.append(KeywordRule(pattern=pattern, match_type=mt, weight=weight))
+            cs = bool(row.get("case_sensitive", False))
+            ch = str(row.get("category_hint", "") or "").strip()
+            out.append(
+                KeywordRule(
+                    pattern=pattern,
+                    match_type=mt,
+                    weight=weight,
+                    case_sensitive=cs,
+                    category_hint=ch,
+                ),
+            )
         return out
     if isinstance(data, dict):
         for k, v in data.items():
@@ -158,14 +179,22 @@ def load_tracked_entities(configs_dir: Path) -> list[TrackedEntity]:
         if not name:
             continue
         aliases = [str(a).strip() for a in (row.get("aliases") or []) if str(a).strip()]
-        etype = str(row.get("type", "")).strip()
+        etype = str(row.get("entity_type") or row.get("type", "") or "").strip()
         priority = float(row.get("priority", 1.0))
+        sp_raw = row.get("source_preference")
+        if isinstance(sp_raw, list):
+            source_pref = [str(x).strip() for x in sp_raw if str(x).strip()]
+        elif isinstance(sp_raw, str) and sp_raw.strip():
+            source_pref = [p.strip() for p in sp_raw.split(",") if p.strip()]
+        else:
+            source_pref = []
         out.append(
             TrackedEntity(
                 name=name,
                 aliases=aliases,
                 entity_type=etype,
                 priority=priority,
+                source_preference=source_pref,
             ),
         )
     return out

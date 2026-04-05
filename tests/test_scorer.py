@@ -35,7 +35,36 @@ def test_compute_freshness_score() -> None:
 
 def test_compute_source_score_clamped() -> None:
     sc = ScoringConfig(source_weights={"arxiv": 1.0})
-    assert 0.0 <= compute_source_score("arxiv", "x", sc) <= 1.0
+    raw = RawItem(
+        source_type="arxiv",
+        source_name="x",
+        external_id="e",
+        dedupe_id="d",
+        canonical_id=None,
+        title="t",
+        text="",
+        raw_content=None,
+        url="",
+        published_at=datetime.now(timezone.utc),
+        updated_at=None,
+        meta={},
+    )
+    assert compute_source_score(raw, sc) == 1.0
+    raw_prio = RawItem(
+        source_type="arxiv",
+        source_name="x",
+        external_id="e2",
+        dedupe_id="d2",
+        canonical_id=None,
+        title="t",
+        text="",
+        raw_content=None,
+        url="",
+        published_at=datetime.now(timezone.utc),
+        updated_at=None,
+        meta={"source_priority": 0.42},
+    )
+    assert abs(compute_source_score(raw_prio, sc) - 0.42) < 1e-9
 
 
 def test_score_item_final_in_unit_interval() -> None:

@@ -1,86 +1,107 @@
 [
   {
     "name": "Boston Dynamics",
-    "aliases": ["BostonDynamics", "BD"],
+    "aliases": ["BostonDynamics"],
     "type": "company",
     "priority": 1.2,
-    "source_preference": "rss,company"
+    "source_preference": ["rss", "github"]
   },
   {
     "name": "Figure AI",
     "aliases": ["Figure", "FigureAI"],
     "type": "company",
     "priority": 1.3,
-    "source_preference": "all"
+    "source_preference": ["rss", "github"]
   },
   {
     "name": "Tesla Optimus",
     "aliases": ["Tesla Bot", "Optimus"],
     "type": "company",
     "priority": 1.1,
-    "source_preference": "rss,media"
+    "source_preference": ["rss"]
+  },
+  {
+    "name": "1X Technologies",
+    "aliases": ["1X"],
+    "type": "company",
+    "priority": 1.05,
+    "source_preference": ["rss", "github"]
+  },
+  {
+    "name": "Agility Robotics",
+    "aliases": ["Digit"],
+    "type": "company",
+    "priority": 1.05,
+    "source_preference": ["rss"]
+  },
+  {
+    "name": "Sanctuary AI",
+    "aliases": [],
+    "type": "company",
+    "priority": 1.0,
+    "source_preference": ["rss"]
   },
   {
     "name": "Google DeepMind",
     "aliases": ["DeepMind", "Google Deep Mind"],
     "type": "lab",
     "priority": 1.25,
-    "source_preference": "arxiv,openalex"
+    "source_preference": ["arxiv", "rss"]
   },
   {
     "name": "Open Robotics",
-    "aliases": ["OSRF", "ROS"],
+    "aliases": ["OSRF"],
     "type": "lab",
     "priority": 1.0,
-    "source_preference": "github,open_source"
+    "source_preference": ["github", "rss"]
   },
   {
     "name": "NVIDIA",
     "aliases": ["Nvidia", "英伟达"],
     "type": "company",
     "priority": 1.15,
-    "source_preference": "rss,company,github"
+    "source_preference": ["rss", "github"]
+  },
+  {
+    "name": "Toyota Research Institute",
+    "aliases": ["TRI"],
+    "type": "lab",
+    "priority": 1.05,
+    "source_preference": ["rss", "arxiv"]
   },
   {
     "name": "ETH Zurich RSL",
     "aliases": ["Robotic Systems Lab", "RSL ETH"],
     "type": "lab",
     "priority": 1.05,
-    "source_preference": "arxiv,github"
+    "source_preference": ["arxiv", "github"]
   },
   {
     "name": "CMU Robotics Institute",
-    "aliases": ["CMU RI", "Carnegie Mellon Robotics"],
+    "aliases": ["Carnegie Mellon Robotics"],
     "type": "lab",
     "priority": 1.08,
-    "source_preference": "arxiv,openalex"
+    "source_preference": ["arxiv", "openalex"]
   },
   {
-    "name": "IEEE Spectrum Robotics",
-    "aliases": ["IEEE Spectrum"],
-    "type": "media",
-    "priority": 0.85,
-    "source_preference": "rss,media"
+    "name": "Stanford SVL",
+    "aliases": ["Stanford Vision and Learning Lab"],
+    "type": "lab",
+    "priority": 1.02,
+    "source_preference": ["arxiv", "rss"]
   },
   {
-    "name": "The Robot Report",
-    "aliases": ["Robot Report"],
-    "type": "media",
-    "priority": 0.8,
-    "source_preference": "rss"
+    "name": "Meta FAIR",
+    "aliases": ["Facebook AI Research", "FAIR"],
+    "type": "lab",
+    "priority": 1.05,
+    "source_preference": ["github", "arxiv"]
   },
   {
-    "name": "RSS 2025",
-    "aliases": ["Robotics Science and Systems"],
-    "type": "event_org",
-    "priority": 0.75,
-    "source_preference": "event"
-  },
-  {
-    "name": "CoRL",
-    "aliases": ["Conference on Robot Learning"],
-    "type": "event_org",
-    "priority": 0.78,
-    "source_preference": "event,arxiv"
+    "name": "DJI",
+    "aliases": [],
+    "type": "company",
+    "priority": 0.95,
+    "source_preference": ["rss"]
   }
 ]

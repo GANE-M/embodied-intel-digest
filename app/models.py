@@ -14,16 +14,19 @@ class KeywordRule:
     pattern: str
     match_type: str = "literal"
     weight: float = 1.0
+    case_sensitive: bool = False
+    category_hint: str = ""
 
 
 @dataclass
 class TrackedEntity:
-    """Entity row from tracked_entities.json (JSON key ``type`` → ``entity_type``)."""
+    """Entity row from tracked_entities.json (JSON key ``type`` / ``entity_type``)."""
 
     name: str
     aliases: list[str] = field(default_factory=list)
     entity_type: str = ""
     priority: float = 1.0
+    source_preference: list[str] = field(default_factory=list)
 
 
 @dataclass

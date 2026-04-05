@@ -41,6 +41,12 @@ from app.utils.logger import get_logger
 from app.utils.time_utils import compute_since, format_date, now_in_tz, now_utc
 
 
+def _is_arxiv_rss_duplicate(feed: dict) -> bool:
+    """arXiv ingestion is handled by ``ArxivSource``; skip duplicate RSS URLs."""
+    u = str(feed.get("url", "")).lower()
+    return "arxiv.org" in u and "rss" in u
+
+
 def build_sources(config: AppConfig) -> list[BaseSource]:
     d = config.configs_dir
     rules = load_keyword_rules(d)
@@ -51,6 +57,7 @@ def build_sources(config: AppConfig) -> list[BaseSource]:
         for x in os.getenv("ARXIV_CATEGORIES", "cs.RO").split(",")
         if x.strip()
     ]
+    # arXiv papers: use ArxivSource only (not RSS feeds pointing at arxiv.org/rss/...).
     sources: list[BaseSource] = [
         ArxivSource(categories, literal_keywords or ["robotics"]),
         OpenAlexSource(literal_keywords or ["embodied intelligence"], []),
@@ -58,17 +65,19 @@ def build_sources(config: AppConfig) -> list[BaseSource]:
 
     repos_cfg = load_json_config(d / "tracked_repos.json")
     if isinstance(repos_cfg, list):
-        repos = [
-            str(r["repo"])
+        repos_list = [
+            r
             for r in repos_cfg
             if isinstance(r, dict) and r.get("enabled", True) and r.get("repo")
         ]
-        if repos:
-            sources.append(GitHubSource(repos))
+        if repos_list:
+            sources.append(GitHubSource(repos_list))
 
     feeds = load_json_config(d / "tracked_feeds.json")
     if isinstance(feeds, list) and feeds:
-        sources.append(RSSSource(feeds))
+        feeds_use = [f for f in feeds if isinstance(f, dict) and not _is_arxiv_rss_duplicate(f)]
+        if feeds_use:
+            sources.append(RSSSource(feeds_use))
 
     events = load_json_config(d / "tracked_events.json")
     if isinstance(events, list) and events:
@@ -171,7 +180,10 @@ def run() -> None:
 
     new_items = filter_new_items(processed, store)
     new_items.sort(key=lambda x: x.final_score, reverse=True)
-    to_send = new_items[: config.top_n]
+    candidates = [x for x in new_items if x.final_score >= config.min_final_score]
+    if config.require_keyword_or_entity_hit:
+        candidates = [x for x in candidates if x.matched_keywords or x.matched_entities]
+    to_send = candidates[: config.top_n]
 
     date_str = format_date(now_in_tz(config.timezone), config.timezone)
     status = constants.RUN_STATUS_SUCCESS

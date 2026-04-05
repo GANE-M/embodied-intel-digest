@@ -45,6 +45,20 @@ class RSSSource(BaseSource):
         name = str(feed.get("name", "feed"))
         ext_id = str(getattr(entry, "id", "") or link or title)[:1024]
         dedupe_id = make_dedupe_id("rss", ext_id, link, title)
+        meta: dict[str, Any] = {
+            "feed_url": feed.get("url", ""),
+            "feed_category": feed.get("category", ""),
+            "feed_name": name,
+        }
+        prio = feed.get("priority")
+        if prio is not None:
+            try:
+                meta["source_priority"] = float(prio)
+            except (TypeError, ValueError):
+                pass
+        cat = feed.get("category")
+        if cat is not None and str(cat).strip():
+            meta["source_category"] = str(cat).strip()
         return RawItem(
             source_type=self.source_type,
             source_name=name,
@@ -63,10 +77,7 @@ class RSSSource(BaseSource):
                 if isinstance(a, dict)
             ],
             tags=[str(feed.get("category", ""))] if feed.get("category") else [],
-            meta={
-                "feed_url": feed.get("url", ""),
-                "feed_category": feed.get("category", ""),
-            },
+            meta=meta,
         )
 
     def _parse_feed(self, feed: dict[str, Any], since: datetime) -> list[RawItem]:

@@ -14,12 +14,32 @@ from app.utils.hash_utils import make_dedupe_id
 from app.utils.logger import get_logger
 
 
+def _normalize_repo_configs(repos: list[str | dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for r in repos:
+        if isinstance(r, str):
+            s = r.strip()
+            if s:
+                out.append({"repo": s, "enabled": True})
+        elif isinstance(r, dict) and r.get("enabled", True):
+            s = str(r.get("repo", "")).strip()
+            if s:
+                cfg = dict(r)
+                cfg["repo"] = s
+                out.append(cfg)
+    return out
+
+
 class GitHubSource(BaseSource):
     source_type = "github"
     source_name = "GitHub"
 
-    def __init__(self, repos: list[str], orgs: list[str] | None = None) -> None:
-        self._repos = repos
+    def __init__(
+        self,
+        repos: list[str] | list[dict[str, Any]],
+        orgs: list[str] | None = None,
+    ) -> None:
+        self._repo_cfgs = _normalize_repo_configs(list(repos))
         self._orgs = orgs or []
 
     def _headers(self) -> dict[str, str]:
@@ -66,7 +86,26 @@ class GitHubSource(BaseSource):
             return []
         return [x for x in data if isinstance(x, dict)]
 
-    def _release_to_raw_item(self, release: dict[str, Any], repo: str) -> RawItem:
+    def _repo_meta(self, repo_cfg: dict[str, Any]) -> dict[str, Any]:
+        repo = str(repo_cfg["repo"])
+        m: dict[str, Any] = {"repo": repo, "repo_name": repo}
+        sp = repo_cfg.get("priority")
+        if sp is not None:
+            try:
+                m["source_priority"] = float(sp)
+            except (TypeError, ValueError):
+                pass
+        cat = repo_cfg.get("category")
+        if cat is not None and str(cat).strip():
+            m["source_category"] = str(cat).strip()
+        return m
+
+    def _release_to_raw_item(
+        self,
+        release: dict[str, Any],
+        repo_cfg: dict[str, Any],
+    ) -> RawItem:
+        repo = str(repo_cfg["repo"])
         tag = str(release.get("tag_name", ""))
         title = str(release.get("name", "") or tag)
         body = str(release.get("body", "") or "")
@@ -79,6 +118,8 @@ class GitHubSource(BaseSource):
         rid = str(release.get("id", url))
         external_id = f"{repo}:release:{rid}"
         dedupe_id = make_dedupe_id("github", external_id, url, title)
+        meta = self._repo_meta(repo_cfg)
+        meta.update({"tag": tag, "github_kind": "release"})
         return RawItem(
             source_type=self.source_type,
             source_name=self.source_name,
@@ -93,10 +134,15 @@ class GitHubSource(BaseSource):
             updated_at=None,
             authors=[],
             tags=["release"],
-            meta={"repo": repo, "tag": tag, "github_kind": "release"},
+            meta=meta,
         )
 
-    def _commit_to_raw_item(self, commit: dict[str, Any], repo: str) -> RawItem:
+    def _commit_to_raw_item(
+        self,
+        commit: dict[str, Any],
+        repo_cfg: dict[str, Any],
+    ) -> RawItem:
+        repo = str(repo_cfg["repo"])
         sha = str(commit.get("sha", ""))[:40]
         cmt = commit.get("commit") if isinstance(commit.get("commit"), dict) else {}
         msg = str((cmt.get("message") or "")).split("\n")[0].strip() or sha[:7]
@@ -108,6 +154,8 @@ class GitHubSource(BaseSource):
             published_at = datetime.now(timezone.utc)
         external_id = f"{repo}:commit:{sha[:7]}"
         dedupe_id = make_dedupe_id("github", external_id, url, msg)
+        meta = self._repo_meta(repo_cfg)
+        meta.update({"sha": sha, "github_kind": "commit"})
         return RawItem(
             source_type=self.source_type,
             source_name=self.source_name,
@@ -122,7 +170,7 @@ class GitHubSource(BaseSource):
             updated_at=None,
             authors=[],
             tags=["commit"],
-            meta={"repo": repo, "sha": sha, "github_kind": "commit"},
+            meta=meta,
         )
 
     def fetch(self, since: datetime) -> list[RawItem]:
@@ -130,16 +178,17 @@ class GitHubSource(BaseSource):
         try:
             since_utc = since.astimezone(timezone.utc) if since.tzinfo else since.replace(tzinfo=timezone.utc)
             out: list[RawItem] = []
-            for repo in self._repos:
+            for repo_cfg in self._repo_cfgs:
+                repo = str(repo_cfg["repo"])
                 for rel in self._fetch_repo_releases(repo):
-                    item = self._release_to_raw_item(rel, repo)
+                    item = self._release_to_raw_item(rel, repo_cfg)
                     pub = item.published_at
                     if pub.tzinfo is None:
                         pub = pub.replace(tzinfo=timezone.utc)
                     if pub >= since_utc:
                         out.append(item)
                 for c in self._fetch_recent_commits(repo, since):
-                    item = self._commit_to_raw_item(c, repo)
+                    item = self._commit_to_raw_item(c, repo_cfg)
                     pub = item.published_at
                     if pub.tzinfo is None:
                         pub = pub.replace(tzinfo=timezone.utc)

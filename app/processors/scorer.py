@@ -1,4 +1,8 @@
-"""Scoring with models.KeywordRule / models.TrackedEntity (v1.4)."""
+"""Scoring with models.KeywordRule / models.TrackedEntity (v1.4).
+
+``KeywordRule.category_hint`` is loaded from JSON for future routing; it does not
+affect scores in this version.
+"""
 
 from __future__ import annotations
 
@@ -14,11 +18,58 @@ def _clamp01(x: float) -> float:
     return max(0.0, min(1.0, float(x)))
 
 
+def _regex_match(text: str, pattern: str, case_sensitive: bool) -> bool:
+    hay = normalize_whitespace(text)
+    try:
+        flags = 0 if case_sensitive else re.IGNORECASE
+        return re.search(pattern, hay, flags=flags) is not None
+    except re.error:
+        return False
+
+
+def _literal_match(text: str, pattern: str, case_sensitive: bool) -> bool:
+    pat = pattern.strip()
+    if not pat:
+        return False
+    hay_raw = normalize_whitespace(text)
+    hay_lower = hay_raw.lower()
+    subj_lower = pat.lower()
+    if len(subj_lower) <= 3:
+        if case_sensitive:
+            return (
+                re.search(
+                    rf"(?<![A-Za-z0-9]){re.escape(pat)}(?![A-Za-z0-9])",
+                    hay_raw,
+                )
+                is not None
+            )
+        return (
+            re.search(
+                rf"(?<![a-z0-9]){re.escape(subj_lower)}(?![a-z0-9])",
+                hay_lower,
+            )
+            is not None
+        )
+    if case_sensitive:
+        return pat in hay_raw
+    return subj_lower in hay_lower
+
+
+def _entity_term_in_hay(hay_lower: str, term: str) -> bool:
+    t = term.strip().lower()
+    if not t:
+        return False
+    if len(t) <= 3:
+        return (
+            re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", hay_lower) is not None
+        )
+    return t in hay_lower
+
+
 def compute_keyword_score(
     text: str,
     keyword_rules: list[KeywordRule],
 ) -> tuple[float, list[str]]:
-    hay = normalize_whitespace(text).lower()
     matched: list[str] = []
     raw = 0.0
     max_total = 0.0
@@ -29,14 +80,10 @@ def compute_keyword_score(
         weight = max(0.0, float(rule.weight))
         max_total += weight
         mt = (rule.match_type or "literal").lower()
-        hit = False
         if mt == "regex":
-            try:
-                hit = re.search(pattern, hay, flags=re.IGNORECASE) is not None
-            except re.error:
-                hit = False
+            hit = _regex_match(text, pattern, rule.case_sensitive)
         else:
-            hit = pattern.lower() in hay
+            hit = _literal_match(text, pattern, rule.case_sensitive)
         if hit:
             matched.append(pattern)
             raw += weight
@@ -58,11 +105,11 @@ def compute_entity_score(
             continue
         priority = max(0.0, float(ent.priority))
         max_total += priority
-        names = [name.lower()]
+        terms = [name]
         for a in ent.aliases:
             if a.strip():
-                names.append(a.strip().lower())
-        hit = any(n and n in hay for n in names)
+                terms.append(a.strip())
+        hit = any(_entity_term_in_hay(hay, t) for t in terms)
         if hit:
             matched.append(name)
             raw += priority
@@ -85,12 +132,18 @@ def compute_freshness_score(published_at: datetime, current_time: datetime) -> f
 
 
 def compute_source_score(
-    source_type: str,
-    source_name: str,
+    raw_item: RawItem,
     scoring_config: ScoringConfig,
 ) -> float:
-    _ = source_name
-    w = scoring_config.source_weights.get(source_type.lower(), 0.75)
+    meta = raw_item.meta or {}
+    sp = meta.get("source_priority")
+    if sp is not None and sp != "":
+        try:
+            return _clamp01(float(sp))
+        except (TypeError, ValueError):
+            pass
+    st = (raw_item.source_type or "").lower()
+    w = scoring_config.source_weights.get(st, 0.75)
     return _clamp01(w)
 
 
@@ -105,11 +158,7 @@ def score_item(
     kw_score, kw_hits = compute_keyword_score(blob, keyword_rules)
     ent_score, ent_hits = compute_entity_score(blob, entities)
     fresh = compute_freshness_score(raw_item.published_at, current_time)
-    src = compute_source_score(
-        raw_item.source_type,
-        raw_item.source_name,
-        scoring_config,
-    )
+    src = compute_source_score(raw_item, scoring_config)
     wk = scoring_config.keyword_weight
     we = scoring_config.entity_weight
     wf = scoring_config.freshness_weight

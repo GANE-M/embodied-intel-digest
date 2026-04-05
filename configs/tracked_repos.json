@@ -6,52 +6,58 @@
     "category": "open_source"
   },
   {
-    "repo": "facebookresearch/habitat-sim",
+    "repo": "moveit/moveit2",
+    "enabled": true,
+    "priority": 0.88,
+    "category": "open_source"
+  },
+  {
+    "repo": "isaac-sim/IsaacLab",
     "enabled": true,
     "priority": 1.0,
+    "category": "research"
+  },
+  {
+    "repo": "huggingface/lerobot",
+    "enabled": true,
+    "priority": 0.98,
+    "category": "research"
+  },
+  {
+    "repo": "openvla/openvla",
+    "enabled": true,
+    "priority": 0.96,
+    "category": "research"
+  },
+  {
+    "repo": "Physical-Intelligence/openpi",
+    "enabled": true,
+    "priority": 0.96,
+    "category": "research"
+  },
+  {
+    "repo": "google-deepmind/open_x_embodiment",
+    "enabled": true,
+    "priority": 0.94,
+    "category": "research"
+  },
+  {
+    "repo": "haosulab/ManiSkill",
+    "enabled": true,
+    "priority": 0.9,
+    "category": "research"
+  },
+  {
+    "repo": "ARISE-Initiative/robomimic",
+    "enabled": true,
+    "priority": 0.9,
     "category": "research"
   },
   {
     "repo": "facebookresearch/habitat-lab",
     "enabled": true,
-    "priority": 1.0,
-    "category": "research"
-  },
-  {
-    "repo": "openai/roboschool",
-    "enabled": false,
-    "priority": 0.5,
-    "category": "research"
-  },
-  {
-    "repo": "google-research/google-research",
-    "enabled": true,
-    "priority": 0.85,
-    "category": "research"
-  },
-  {
-    "repo": "pytorch/pytorch",
-    "enabled": true,
-    "priority": 0.7,
-    "category": "tooling"
-  },
-  {
-    "repo": "NVIDIA-Omniverse/IsaacSim",
-    "enabled": true,
-    "priority": 1.05,
-    "category": "research"
-  },
-  {
-    "repo": "microsoft/AirSim",
-    "enabled": true,
-    "priority": 0.95,
-    "category": "research"
-  },
-  {
-    "repo": "MuJoCo/mujoco",
-    "enabled": true,
     "priority": 0.92,
-    "category": "tooling"
+    "category": "research"
   },
   {
     "repo": "ros-planning/navigation2",
@@ -60,15 +66,33 @@
     "category": "open_source"
   },
   {
-    "repo": "opencv/opencv",
+    "repo": "microsoft/AirSim",
     "enabled": true,
-    "priority": 0.65,
+    "priority": 0.85,
+    "category": "research"
+  },
+  {
+    "repo": "MuJoCo/mujoco",
+    "enabled": true,
+    "priority": 0.85,
     "category": "tooling"
   },
   {
-    "repo": "tensorflow/tensorflow",
-    "enabled": false,
-    "priority": 0.6,
-    "category": "tooling"
+    "repo": "gazebosim/gz-sim",
+    "enabled": true,
+    "priority": 0.8,
+    "category": "open_source"
+  },
+  {
+    "repo": "Lifelong-Robot-Learning/LIBERO",
+    "enabled": true,
+    "priority": 0.82,
+    "category": "research"
+  },
+  {
+    "repo": "unitreerobotics/unitree_sdk2",
+    "enabled": true,
+    "priority": 0.78,
+    "category": "open_source"
   }
 ]

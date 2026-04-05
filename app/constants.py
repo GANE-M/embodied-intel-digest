@@ -36,6 +36,7 @@ STORE_TYPES_UNSUPPORTED: tuple[str, ...] = ("sqlite", "postgres", "supabase")
 DEFAULT_TOP_N: int = 20
 DEFAULT_LOOKBACK_HOURS: int = 24
 DEFAULT_SUMMARY_MODE: str = "template"
+DEFAULT_MIN_FINAL_SCORE: float = 0.35
 
 DEFAULT_SOURCE_WEIGHTS: dict[str, float] = {
     "arxiv": 1.0,

@@ -1,74 +1,86 @@
 [
   {
-    "name": "arXiv cs.RO",
-    "url": "https://arxiv.org/rss/cs.RO",
+    "name": "Papers With Code — Latest",
+    "url": "https://paperswithcode.com/rss/latest",
     "category": "research",
+    "priority": 0.92,
     "enabled": true
   },
   {
-    "name": "arXiv cs.LG",
-    "url": "https://arxiv.org/rss/cs.LG",
+    "name": "Hugging Face Blog",
+    "url": "https://huggingface.co/blog/feed.xml",
     "category": "research",
+    "priority": 0.9,
     "enabled": true
   },
   {
     "name": "Google AI Blog",
     "url": "https://blog.google/technology/ai/rss/index.xml",
     "category": "company",
+    "priority": 0.95,
     "enabled": true
   },
   {
     "name": "NVIDIA Blog",
     "url": "https://blogs.nvidia.com/feed/",
     "category": "company",
-    "enabled": true
-  },
-  {
-    "name": "MIT Technology Review",
-    "url": "https://www.technologyreview.com/feed/",
-    "category": "media",
-    "enabled": true
-  },
-  {
-    "name": "IEEE Spectrum",
-    "url": "https://spectrum.ieee.org/rss/fulltext",
-    "category": "media",
+    "priority": 0.95,
     "enabled": true
   },
   {
     "name": "OpenAI News",
     "url": "https://openai.com/blog/rss.xml",
     "category": "company",
+    "priority": 0.95,
     "enabled": true
   },
   {
     "name": "DeepMind Blog",
     "url": "https://deepmind.google/blog/rss.xml",
     "category": "company",
+    "priority": 0.95,
     "enabled": true
   },
   {
-    "name": "ROS Discourse News",
+    "name": "ROS Discourse",
     "url": "https://discourse.ros.org/posts.rss",
-    "category": "research",
+    "category": "open_source",
+    "priority": 0.88,
     "enabled": true
+  },
+  {
+    "name": "Stanford HAI News",
+    "url": "https://hai.stanford.edu/news/rss.xml",
+    "category": "research",
+    "priority": 0.82,
+    "enabled": true
+  },
+  {
+    "name": "MIT Technology Review",
+    "url": "https://www.technologyreview.com/feed/",
+    "category": "media",
+    "priority": 0.65,
+    "enabled": false
+  },
+  {
+    "name": "IEEE Spectrum",
+    "url": "https://spectrum.ieee.org/rss/fulltext",
+    "category": "media",
+    "priority": 0.65,
+    "enabled": false
   },
   {
     "name": "Robotics Tomorrow",
     "url": "https://www.roboticstomorrow.com/rss.php",
     "category": "media",
+    "priority": 0.55,
     "enabled": false
   },
   {
-    "name": "Unity Blog",
+    "name": "Unity Robotics Blog",
     "url": "https://blog.unity.com/topic/robotics/rss.xml",
     "category": "research",
+    "priority": 0.6,
     "enabled": false
-  },
-  {
-    "name": "Stanford HAI",
-    "url": "https://hai.stanford.edu/news/rss.xml",
-    "category": "research",
-    "enabled": true
   }
 ]
