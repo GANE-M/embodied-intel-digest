@@ -30,6 +30,21 @@ class TrackedEntity:
 
 
 @dataclass
+class DeliveryTarget:
+    """One SMTP endpoint + recipient list (multi-server digest delivery)."""
+
+    name: str
+    smtp_host: str
+    smtp_port: int
+    smtp_username: str
+    smtp_password: str
+    email_from: str
+    email_to: list[str]
+    use_ssl: bool = False
+    enabled: bool = True
+
+
+@dataclass
 class ScoringConfig:
     """Weights for sub-scores and final_score (typically sum to 1.0)."""
 

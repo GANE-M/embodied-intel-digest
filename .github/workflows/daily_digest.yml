@@ -1,4 +1,5 @@
 # Daily digest — install stack must be `pip install -r requirements.txt` only (v1.4).
+# STATE_DIR below is on the ephemeral runner disk unless you add restore/persist steps (see README).
 name: Daily digest
 
 on:

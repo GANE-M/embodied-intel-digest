@@ -380,7 +380,11 @@ def filter_new_items(items: list[ProcessedItem], store: BaseStore) -> list[Proce
 File: app\processors\scorer.py
 ========================================================================
 
-"""Scoring with models.KeywordRule / models.TrackedEntity (v1.4)."""
+"""Scoring with models.KeywordRule / models.TrackedEntity (v1.4).
+
+``KeywordRule.category_hint`` is loaded from JSON for future routing; it does not
+affect scores in this version.
+"""
 
 from __future__ import annotations
 
@@ -396,11 +400,58 @@ def _clamp01(x: float) -> float:
     return max(0.0, min(1.0, float(x)))
 
 
+def _regex_match(text: str, pattern: str, case_sensitive: bool) -> bool:
+    hay = normalize_whitespace(text)
+    try:
+        flags = 0 if case_sensitive else re.IGNORECASE
+        return re.search(pattern, hay, flags=flags) is not None
+    except re.error:
+        return False
+
+
+def _literal_match(text: str, pattern: str, case_sensitive: bool) -> bool:
+    pat = pattern.strip()
+    if not pat:
+        return False
+    hay_raw = normalize_whitespace(text)
+    hay_lower = hay_raw.lower()
+    subj_lower = pat.lower()
+    if len(subj_lower) <= 3:
+        if case_sensitive:
+            return (
+                re.search(
+                    rf"(?<![A-Za-z0-9]){re.escape(pat)}(?![A-Za-z0-9])",
+                    hay_raw,
+                )
+                is not None
+            )
+        return (
+            re.search(
+                rf"(?<![a-z0-9]){re.escape(subj_lower)}(?![a-z0-9])",
+                hay_lower,
+            )
+            is not None
+        )
+    if case_sensitive:
+        return pat in hay_raw
+    return subj_lower in hay_lower
+
+
+def _entity_term_in_hay(hay_lower: str, term: str) -> bool:
+    t = term.strip().lower()
+    if not t:
+        return False
+    if len(t) <= 3:
+        return (
+            re.search(rf"(?<![a-z0-9]){re.escape(t)}(?![a-z0-9])", hay_lower) is not None
+        )
+    return t in hay_lower
+
+
 def compute_keyword_score(
     text: str,
     keyword_rules: list[KeywordRule],
 ) -> tuple[float, list[str]]:
-    hay = normalize_whitespace(text).lower()
     matched: list[str] = []
     raw = 0.0
     max_total = 0.0
@@ -411,14 +462,10 @@ def compute_keyword_score(
         weight = max(0.0, float(rule.weight))
         max_total += weight
         mt = (rule.match_type or "literal").lower()
-        hit = False
         if mt == "regex":
-            try:
-                hit = re.search(pattern, hay, flags=re.IGNORECASE) is not None
-            except re.error:
-                hit = False
+            hit = _regex_match(text, pattern, rule.case_sensitive)
         else:
-            hit = pattern.lower() in hay
+            hit = _literal_match(text, pattern, rule.case_sensitive)
         if hit:
             matched.append(pattern)
             raw += weight
@@ -440,11 +487,11 @@ def compute_entity_score(
             continue
         priority = max(0.0, float(ent.priority))
         max_total += priority
-        names = [name.lower()]
+        terms = [name]
         for a in ent.aliases:
             if a.strip():
-                names.append(a.strip().lower())
-        hit = any(n and n in hay for n in names)
+                terms.append(a.strip())
+        hit = any(_entity_term_in_hay(hay, t) for t in terms)
         if hit:
             matched.append(name)
             raw += priority
@@ -467,12 +514,18 @@ def compute_freshness_score(published_at: datetime, current_time: datetime) -> f
 
 
 def compute_source_score(
-    source_type: str,
-    source_name: str,
+    raw_item: RawItem,
     scoring_config: ScoringConfig,
 ) -> float:
-    _ = source_name
-    w = scoring_config.source_weights.get(source_type.lower(), 0.75)
+    meta = raw_item.meta or {}
+    sp = meta.get("source_priority")
+    if sp is not None and sp != "":
+        try:
+            return _clamp01(float(sp))
+        except (TypeError, ValueError):
+            pass
+    st = (raw_item.source_type or "").lower()
+    w = scoring_config.source_weights.get(st, 0.75)
     return _clamp01(w)
 
 
@@ -487,11 +540,7 @@ def score_item(
     kw_score, kw_hits = compute_keyword_score(blob, keyword_rules)
     ent_score, ent_hits = compute_entity_score(blob, entities)
     fresh = compute_freshness_score(raw_item.published_at, current_time)
-    src = compute_source_score(
-        raw_item.source_type,
-        raw_item.source_name,
-        scoring_config,
-    )
+    src = compute_source_score(raw_item, scoring_config)
     wk = scoring_config.keyword_weight
     we = scoring_config.entity_weight
     wf = scoring_config.freshness_weight
@@ -953,12 +1002,32 @@ from app.utils.hash_utils import make_dedupe_id
 from app.utils.logger import get_logger
 
 
+def _normalize_repo_configs(repos: list[str | dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for r in repos:
+        if isinstance(r, str):
+            s = r.strip()
+            if s:
+                out.append({"repo": s, "enabled": True})
+        elif isinstance(r, dict) and r.get("enabled", True):
+            s = str(r.get("repo", "")).strip()
+            if s:
+                cfg = dict(r)
+                cfg["repo"] = s
+                out.append(cfg)
+    return out
+
+
 class GitHubSource(BaseSource):
     source_type = "github"
     source_name = "GitHub"
 
-    def __init__(self, repos: list[str], orgs: list[str] | None = None) -> None:
-        self._repos = repos
+    def __init__(
+        self,
+        repos: list[str] | list[dict[str, Any]],
+        orgs: list[str] | None = None,
+    ) -> None:
+        self._repo_cfgs = _normalize_repo_configs(list(repos))
         self._orgs = orgs or []
 
     def _headers(self) -> dict[str, str]:
@@ -1005,7 +1074,26 @@ class GitHubSource(BaseSource):
             return []
         return [x for x in data if isinstance(x, dict)]
 
-    def _release_to_raw_item(self, release: dict[str, Any], repo: str) -> RawItem:
+    def _repo_meta(self, repo_cfg: dict[str, Any]) -> dict[str, Any]:
+        repo = str(repo_cfg["repo"])
+        m: dict[str, Any] = {"repo": repo, "repo_name": repo}
+        sp = repo_cfg.get("priority")
+        if sp is not None:
+            try:
+                m["source_priority"] = float(sp)
+            except (TypeError, ValueError):
+                pass
+        cat = repo_cfg.get("category")
+        if cat is not None and str(cat).strip():
+            m["source_category"] = str(cat).strip()
+        return m
+
+    def _release_to_raw_item(
+        self,
+        release: dict[str, Any],
+        repo_cfg: dict[str, Any],
+    ) -> RawItem:
+        repo = str(repo_cfg["repo"])
         tag = str(release.get("tag_name", ""))
         title = str(release.get("name", "") or tag)
         body = str(release.get("body", "") or "")
@@ -1018,6 +1106,8 @@ class GitHubSource(BaseSource):
         rid = str(release.get("id", url))
         external_id = f"{repo}:release:{rid}"
         dedupe_id = make_dedupe_id("github", external_id, url, title)
+        meta = self._repo_meta(repo_cfg)
+        meta.update({"tag": tag, "github_kind": "release"})
         return RawItem(
             source_type=self.source_type,
             source_name=self.source_name,
@@ -1032,10 +1122,15 @@ class GitHubSource(BaseSource):
             updated_at=None,
             authors=[],
             tags=["release"],
-            meta={"repo": repo, "tag": tag, "github_kind": "release"},
+            meta=meta,
         )
 
-    def _commit_to_raw_item(self, commit: dict[str, Any], repo: str) -> RawItem:
+    def _commit_to_raw_item(
+        self,
+        commit: dict[str, Any],
+        repo_cfg: dict[str, Any],
+    ) -> RawItem:
+        repo = str(repo_cfg["repo"])
         sha = str(commit.get("sha", ""))[:40]
         cmt = commit.get("commit") if isinstance(commit.get("commit"), dict) else {}
         msg = str((cmt.get("message") or "")).split("\n")[0].strip() or sha[:7]
@@ -1047,6 +1142,8 @@ class GitHubSource(BaseSource):
             published_at = datetime.now(timezone.utc)
         external_id = f"{repo}:commit:{sha[:7]}"
         dedupe_id = make_dedupe_id("github", external_id, url, msg)
+        meta = self._repo_meta(repo_cfg)
+        meta.update({"sha": sha, "github_kind": "commit"})
         return RawItem(
             source_type=self.source_type,
             source_name=self.source_name,
@@ -1061,7 +1158,7 @@ class GitHubSource(BaseSource):
             updated_at=None,
             authors=[],
             tags=["commit"],
-            meta={"repo": repo, "sha": sha, "github_kind": "commit"},
+            meta=meta,
         )
 
     def fetch(self, since: datetime) -> list[RawItem]:
@@ -1069,16 +1166,17 @@ class GitHubSource(BaseSource):
         try:
             since_utc = since.astimezone(timezone.utc) if since.tzinfo else since.replace(tzinfo=timezone.utc)
             out: list[RawItem] = []
-            for repo in self._repos:
+            for repo_cfg in self._repo_cfgs:
+                repo = str(repo_cfg["repo"])
                 for rel in self._fetch_repo_releases(repo):
-                    item = self._release_to_raw_item(rel, repo)
+                    item = self._release_to_raw_item(rel, repo_cfg)
                     pub = item.published_at
                     if pub.tzinfo is None:
                         pub = pub.replace(tzinfo=timezone.utc)
                     if pub >= since_utc:
                         out.append(item)
                 for c in self._fetch_recent_commits(repo, since):
-                    item = self._commit_to_raw_item(c, repo)
+                    item = self._commit_to_raw_item(c, repo_cfg)
                     pub = item.published_at
                     if pub.tzinfo is None:
                         pub = pub.replace(tzinfo=timezone.utc)
@@ -1251,6 +1349,20 @@ class RSSSource(BaseSource):
         name = str(feed.get("name", "feed"))
         ext_id = str(getattr(entry, "id", "") or link or title)[:1024]
         dedupe_id = make_dedupe_id("rss", ext_id, link, title)
+        meta: dict[str, Any] = {
+            "feed_url": feed.get("url", ""),
+            "feed_category": feed.get("category", ""),
+            "feed_name": name,
+        }
+        prio = feed.get("priority")
+        if prio is not None:
+            try:
+                meta["source_priority"] = float(prio)
+            except (TypeError, ValueError):
+                pass
+        cat = feed.get("category")
+        if cat is not None and str(cat).strip():
+            meta["source_category"] = str(cat).strip()
         return RawItem(
             source_type=self.source_type,
             source_name=name,
@@ -1269,10 +1381,7 @@ class RSSSource(BaseSource):
                 if isinstance(a, dict)
             ],
             tags=[str(feed.get("category", ""))] if feed.get("category") else [],
-            meta={
-                "feed_url": feed.get("url", ""),
-                "feed_category": feed.get("category", ""),
-            },
+            meta=meta,
         )
 
     def _parse_feed(self, feed: dict[str, Any], since: datetime) -> list[RawItem]:
@@ -1811,6 +1920,8 @@ class AppConfig:
     state_dir: Path | None
     database_url: str | None
     configs_dir: Path
+    min_final_score: float
+    require_keyword_or_entity_hit: bool
 
 
 def _parse_state_dir(raw: str | None) -> Path | None:
@@ -1842,6 +1953,13 @@ def load_config() -> AppConfig:
     if not str(llm_url or "").strip():
         llm_url = None
 
+    min_final = float(os.getenv("MIN_FINAL_SCORE", str(constants.DEFAULT_MIN_FINAL_SCORE)))
+    require_hit = (os.getenv("REQUIRE_KEYWORD_OR_ENTITY_HIT", "false") or "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
+
     cfg = AppConfig(
         email_to=os.getenv("EMAIL_TO", ""),
         email_from=os.getenv("EMAIL_FROM", ""),
@@ -1864,6 +1982,8 @@ def load_config() -> AppConfig:
         state_dir=state_dir,
         database_url=os.getenv("DATABASE_URL") or None,
         configs_dir=configs_dir,
+        min_final_score=min(1.0, max(0.0, min_final)),
+        require_keyword_or_entity_hit=require_hit,
     )
     return cfg
 
@@ -1916,7 +2036,17 @@ def load_keyword_rules(configs_dir: Path) -> list[KeywordRule]:
             if mt not in ("literal", "regex"):
                 mt = "literal"
             weight = float(row.get("weight", 1.0))
-            out.append(KeywordRule(pattern=pattern, match_type=mt, weight=weight))
+            cs = bool(row.get("case_sensitive", False))
+            ch = str(row.get("category_hint", "") or "").strip()
+            out.append(
+                KeywordRule(
+                    pattern=pattern,
+                    match_type=mt,
+                    weight=weight,
+                    case_sensitive=cs,
+                    category_hint=ch,
+                ),
+            )
         return out
     if isinstance(data, dict):
         for k, v in data.items():
@@ -1936,14 +2066,22 @@ def load_tracked_entities(configs_dir: Path) -> list[TrackedEntity]:
         if not name:
             continue
         aliases = [str(a).strip() for a in (row.get("aliases") or []) if str(a).strip()]
-        etype = str(row.get("type", "")).strip()
+        etype = str(row.get("entity_type") or row.get("type", "") or "").strip()
         priority = float(row.get("priority", 1.0))
+        sp_raw = row.get("source_preference")
+        if isinstance(sp_raw, list):
+            source_pref = [str(x).strip() for x in sp_raw if str(x).strip()]
+        elif isinstance(sp_raw, str) and sp_raw.strip():
+            source_pref = [p.strip() for p in sp_raw.split(",") if p.strip()]
+        else:
+            source_pref = []
         out.append(
             TrackedEntity(
                 name=name,
                 aliases=aliases,
                 entity_type=etype,
                 priority=priority,
+                source_preference=source_pref,
             ),
         )
     return out
@@ -2008,6 +2146,7 @@ STORE_TYPES_UNSUPPORTED: tuple[str, ...] = ("sqlite", "postgres", "supabase")
 DEFAULT_TOP_N: int = 20
 DEFAULT_LOOKBACK_HOURS: int = 24
 DEFAULT_SUMMARY_MODE: str = "template"
+DEFAULT_MIN_FINAL_SCORE: float = 0.35
 
 DEFAULT_SOURCE_WEIGHTS: dict[str, float] = {
     "arxiv": 1.0,
@@ -2071,6 +2210,12 @@ from app.utils.logger import get_logger
 from app.utils.time_utils import compute_since, format_date, now_in_tz, now_utc
 
 
+def _is_arxiv_rss_duplicate(feed: dict) -> bool:
+    """arXiv ingestion is handled by ``ArxivSource``; skip duplicate RSS URLs."""
+    u = str(feed.get("url", "")).lower()
+    return "arxiv.org" in u and "rss" in u
+
+
 def build_sources(config: AppConfig) -> list[BaseSource]:
     d = config.configs_dir
     rules = load_keyword_rules(d)
@@ -2081,6 +2226,7 @@ def build_sources(config: AppConfig) -> list[BaseSource]:
         for x in os.getenv("ARXIV_CATEGORIES", "cs.RO").split(",")
         if x.strip()
     ]
+    # arXiv papers: use ArxivSource only (not RSS feeds pointing at arxiv.org/rss/...).
     sources: list[BaseSource] = [
         ArxivSource(categories, literal_keywords or ["robotics"]),
         OpenAlexSource(literal_keywords or ["embodied intelligence"], []),
@@ -2088,17 +2234,19 @@ def build_sources(config: AppConfig) -> list[BaseSource]:
 
     repos_cfg = load_json_config(d / "tracked_repos.json")
     if isinstance(repos_cfg, list):
-        repos = [
-            str(r["repo"])
+        repos_list = [
+            r
             for r in repos_cfg
             if isinstance(r, dict) and r.get("enabled", True) and r.get("repo")
         ]
-        if repos:
-            sources.append(GitHubSource(repos))
+        if repos_list:
+            sources.append(GitHubSource(repos_list))
 
     feeds = load_json_config(d / "tracked_feeds.json")
     if isinstance(feeds, list) and feeds:
-        sources.append(RSSSource(feeds))
+        feeds_use = [f for f in feeds if isinstance(f, dict) and not _is_arxiv_rss_duplicate(f)]
+        if feeds_use:
+            sources.append(RSSSource(feeds_use))
 
     events = load_json_config(d / "tracked_events.json")
     if isinstance(events, list) and events:
@@ -2201,7 +2349,10 @@ def run() -> None:
 
     new_items = filter_new_items(processed, store)
     new_items.sort(key=lambda x: x.final_score, reverse=True)
-    to_send = new_items[: config.top_n]
+    candidates = [x for x in new_items if x.final_score >= config.min_final_score]
+    if config.require_keyword_or_entity_hit:
+        candidates = [x for x in candidates if x.matched_keywords or x.matched_entities]
+    to_send = candidates[: config.top_n]
 
     date_str = format_date(now_in_tz(config.timezone), config.timezone)
     status = constants.RUN_STATUS_SUCCESS
@@ -2260,16 +2411,19 @@ class KeywordRule:
     pattern: str
     match_type: str = "literal"
     weight: float = 1.0
+    case_sensitive: bool = False
+    category_hint: str = ""
 
 
 @dataclass
 class TrackedEntity:
-    """Entity row from tracked_entities.json (JSON key ``type`` → ``entity_type``)."""
+    """Entity row from tracked_entities.json (JSON key ``type`` / ``entity_type``)."""
 
     name: str
     aliases: list[str] = field(default_factory=list)
     entity_type: str = ""
     priority: float = 1.0
+    source_preference: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -2341,87 +2495,108 @@ File: configs\tracked_entities.json
 [
   {
     "name": "Boston Dynamics",
-    "aliases": ["BostonDynamics", "BD"],
+    "aliases": ["BostonDynamics"],
     "type": "company",
     "priority": 1.2,
-    "source_preference": "rss,company"
+    "source_preference": ["rss", "github"]
   },
   {
     "name": "Figure AI",
     "aliases": ["Figure", "FigureAI"],
     "type": "company",
     "priority": 1.3,
-    "source_preference": "all"
+    "source_preference": ["rss", "github"]
   },
   {
     "name": "Tesla Optimus",
     "aliases": ["Tesla Bot", "Optimus"],
     "type": "company",
     "priority": 1.1,
-    "source_preference": "rss,media"
+    "source_preference": ["rss"]
+  },
+  {
+    "name": "1X Technologies",
+    "aliases": ["1X"],
+    "type": "company",
+    "priority": 1.05,
+    "source_preference": ["rss", "github"]
+  },
+  {
+    "name": "Agility Robotics",
+    "aliases": ["Digit"],
+    "type": "company",
+    "priority": 1.05,
+    "source_preference": ["rss"]
+  },
+  {
+    "name": "Sanctuary AI",
+    "aliases": [],
+    "type": "company",
+    "priority": 1.0,
+    "source_preference": ["rss"]
   },
   {
     "name": "Google DeepMind",
     "aliases": ["DeepMind", "Google Deep Mind"],
     "type": "lab",
     "priority": 1.25,
-    "source_preference": "arxiv,openalex"
+    "source_preference": ["arxiv", "rss"]
   },
   {
     "name": "Open Robotics",
-    "aliases": ["OSRF", "ROS"],
+    "aliases": ["OSRF"],
     "type": "lab",
     "priority": 1.0,
-    "source_preference": "github,open_source"
+    "source_preference": ["github", "rss"]
   },
   {
     "name": "NVIDIA",
     "aliases": ["Nvidia", "英伟达"],
     "type": "company",
     "priority": 1.15,
-    "source_preference": "rss,company,github"
+    "source_preference": ["rss", "github"]
+  },
+  {
+    "name": "Toyota Research Institute",
+    "aliases": ["TRI"],
+    "type": "lab",
+    "priority": 1.05,
+    "source_preference": ["rss", "arxiv"]
   },
   {
     "name": "ETH Zurich RSL",
     "aliases": ["Robotic Systems Lab", "RSL ETH"],
     "type": "lab",
     "priority": 1.05,
-    "source_preference": "arxiv,github"
+    "source_preference": ["arxiv", "github"]
   },
   {
     "name": "CMU Robotics Institute",
-    "aliases": ["CMU RI", "Carnegie Mellon Robotics"],
+    "aliases": ["Carnegie Mellon Robotics"],
     "type": "lab",
     "priority": 1.08,
-    "source_preference": "arxiv,openalex"
+    "source_preference": ["arxiv", "openalex"]
   },
   {
-    "name": "IEEE Spectrum Robotics",
-    "aliases": ["IEEE Spectrum"],
-    "type": "media",
-    "priority": 0.85,
-    "source_preference": "rss,media"
+    "name": "Stanford SVL",
+    "aliases": ["Stanford Vision and Learning Lab"],
+    "type": "lab",
+    "priority": 1.02,
+    "source_preference": ["arxiv", "rss"]
   },
   {
-    "name": "The Robot Report",
-    "aliases": ["Robot Report"],
-    "type": "media",
-    "priority": 0.8,
-    "source_preference": "rss"
+    "name": "Meta FAIR",
+    "aliases": ["Facebook AI Research", "FAIR"],
+    "type": "lab",
+    "priority": 1.05,
+    "source_preference": ["github", "arxiv"]
   },
   {
-    "name": "RSS 2025",
-    "aliases": ["Robotics Science and Systems"],
-    "type": "event_org",
-    "priority": 0.75,
-    "source_preference": "event"
-  },
-  {
-    "name": "CoRL",
-    "aliases": ["Conference on Robot Learning"],
-    "type": "event_org",
-    "priority": 0.78,
-    "source_preference": "event,arxiv"
+    "name": "DJI",
+    "aliases": [],
+    "type": "company",
+    "priority": 0.95,
+    "source_preference": ["rss"]
   }
 ]
 
@@ -2432,21 +2607,33 @@ File: configs\tracked_events.json
 
 [
   {
-    "name": "RSS 2025",
+    "name": "Robotics: Science and Systems (RSS)",
     "url": "https://roboticsconference.org/",
     "category": "conference",
     "enabled": true
   },
   {
-    "name": "CoRL 2025",
+    "name": "Conference on Robot Learning (CoRL)",
     "url": "https://www.corl.org/",
     "category": "conference",
     "enabled": true
   },
   {
-    "name": "ICRA 2025",
-    "url": "https://www.icra2025.org/",
+    "name": "IEEE ICRA",
+    "url": "https://www.ieee-icra.org/",
     "category": "conference",
+    "enabled": true
+  },
+  {
+    "name": "IEEE/RSJ IROS",
+    "url": "https://www.iros.org/",
+    "category": "conference",
+    "enabled": true
+  },
+  {
+    "name": "ROSCon",
+    "url": "https://roscon.ros.org/",
+    "category": "community_event",
     "enabled": true
   },
   {
@@ -2456,27 +2643,15 @@ File: configs\tracked_events.json
     "enabled": true
   },
   {
-    "name": "Humanoids Symposium",
-    "url": "https://www.humanoids.ws/",
-    "category": "conference",
-    "enabled": false
-  },
-  {
-    "name": "ROSCon",
-    "url": "https://roscon.ros.org/",
-    "category": "community_event",
-    "enabled": true
-  },
-  {
     "name": "NeurIPS",
     "url": "https://neurips.cc/",
     "category": "conference",
     "enabled": true
   },
   {
-    "name": "Product demo placeholder",
-    "url": "https://example.com/product-launch",
-    "category": "product_launch",
+    "name": "Humanoids (symposium series)",
+    "url": "https://www.humanoids.ws/",
+    "category": "conference",
     "enabled": false
   }
 ]
@@ -2488,76 +2663,88 @@ File: configs\tracked_feeds.json
 
 [
   {
-    "name": "arXiv cs.RO",
-    "url": "https://arxiv.org/rss/cs.RO",
+    "name": "Papers With Code — Latest",
+    "url": "https://paperswithcode.com/rss/latest",
     "category": "research",
+    "priority": 0.92,
     "enabled": true
   },
   {
-    "name": "arXiv cs.LG",
-    "url": "https://arxiv.org/rss/cs.LG",
+    "name": "Hugging Face Blog",
+    "url": "https://huggingface.co/blog/feed.xml",
     "category": "research",
+    "priority": 0.9,
     "enabled": true
   },
   {
     "name": "Google AI Blog",
     "url": "https://blog.google/technology/ai/rss/index.xml",
     "category": "company",
+    "priority": 0.95,
     "enabled": true
   },
   {
     "name": "NVIDIA Blog",
     "url": "https://blogs.nvidia.com/feed/",
     "category": "company",
-    "enabled": true
-  },
-  {
-    "name": "MIT Technology Review",
-    "url": "https://www.technologyreview.com/feed/",
-    "category": "media",
-    "enabled": true
-  },
-  {
-    "name": "IEEE Spectrum",
-    "url": "https://spectrum.ieee.org/rss/fulltext",
-    "category": "media",
+    "priority": 0.95,
     "enabled": true
   },
   {
     "name": "OpenAI News",
     "url": "https://openai.com/blog/rss.xml",
     "category": "company",
+    "priority": 0.95,
     "enabled": true
   },
   {
     "name": "DeepMind Blog",
     "url": "https://deepmind.google/blog/rss.xml",
     "category": "company",
+    "priority": 0.95,
     "enabled": true
   },
   {
-    "name": "ROS Discourse News",
+    "name": "ROS Discourse",
     "url": "https://discourse.ros.org/posts.rss",
-    "category": "research",
+    "category": "open_source",
+    "priority": 0.88,
     "enabled": true
+  },
+  {
+    "name": "Stanford HAI News",
+    "url": "https://hai.stanford.edu/news/rss.xml",
+    "category": "research",
+    "priority": 0.82,
+    "enabled": true
+  },
+  {
+    "name": "MIT Technology Review",
+    "url": "https://www.technologyreview.com/feed/",
+    "category": "media",
+    "priority": 0.65,
+    "enabled": false
+  },
+  {
+    "name": "IEEE Spectrum",
+    "url": "https://spectrum.ieee.org/rss/fulltext",
+    "category": "media",
+    "priority": 0.65,
+    "enabled": false
   },
   {
     "name": "Robotics Tomorrow",
     "url": "https://www.roboticstomorrow.com/rss.php",
     "category": "media",
+    "priority": 0.55,
     "enabled": false
   },
   {
-    "name": "Unity Blog",
+    "name": "Unity Robotics Blog",
     "url": "https://blog.unity.com/topic/robotics/rss.xml",
     "category": "research",
+    "priority": 0.6,
     "enabled": false
-  },
-  {
-    "name": "Stanford HAI",
-    "url": "https://hai.stanford.edu/news/rss.xml",
-    "category": "research",
-    "enabled": true
   }
 ]
 
@@ -2722,52 +2909,58 @@ File: configs\tracked_repos.json
     "category": "open_source"
   },
   {
-    "repo": "facebookresearch/habitat-sim",
+    "repo": "moveit/moveit2",
+    "enabled": true,
+    "priority": 0.88,
+    "category": "open_source"
+  },
+  {
+    "repo": "isaac-sim/IsaacLab",
     "enabled": true,
     "priority": 1.0,
+    "category": "research"
+  },
+  {
+    "repo": "huggingface/lerobot",
+    "enabled": true,
+    "priority": 0.98,
+    "category": "research"
+  },
+  {
+    "repo": "openvla/openvla",
+    "enabled": true,
+    "priority": 0.96,
+    "category": "research"
+  },
+  {
+    "repo": "Physical-Intelligence/openpi",
+    "enabled": true,
+    "priority": 0.96,
+    "category": "research"
+  },
+  {
+    "repo": "google-deepmind/open_x_embodiment",
+    "enabled": true,
+    "priority": 0.94,
+    "category": "research"
+  },
+  {
+    "repo": "haosulab/ManiSkill",
+    "enabled": true,
+    "priority": 0.9,
+    "category": "research"
+  },
+  {
+    "repo": "ARISE-Initiative/robomimic",
+    "enabled": true,
+    "priority": 0.9,
     "category": "research"
   },
   {
     "repo": "facebookresearch/habitat-lab",
     "enabled": true,
-    "priority": 1.0,
-    "category": "research"
-  },
-  {
-    "repo": "openai/roboschool",
-    "enabled": false,
-    "priority": 0.5,
-    "category": "research"
-  },
-  {
-    "repo": "google-research/google-research",
-    "enabled": true,
-    "priority": 0.85,
-    "category": "research"
-  },
-  {
-    "repo": "pytorch/pytorch",
-    "enabled": true,
-    "priority": 0.7,
-    "category": "tooling"
-  },
-  {
-    "repo": "NVIDIA-Omniverse/IsaacSim",
-    "enabled": true,
-    "priority": 1.05,
-    "category": "research"
-  },
-  {
-    "repo": "microsoft/AirSim",
-    "enabled": true,
-    "priority": 0.95,
-    "category": "research"
-  },
-  {
-    "repo": "MuJoCo/mujoco",
-    "enabled": true,
     "priority": 0.92,
-    "category": "tooling"
+    "category": "research"
   },
   {
     "repo": "ros-planning/navigation2",
@@ -2776,16 +2969,34 @@ File: configs\tracked_repos.json
     "category": "open_source"
   },
   {
-    "repo": "opencv/opencv",
+    "repo": "microsoft/AirSim",
     "enabled": true,
-    "priority": 0.65,
+    "priority": 0.85,
+    "category": "research"
+  },
+  {
+    "repo": "MuJoCo/mujoco",
+    "enabled": true,
+    "priority": 0.85,
     "category": "tooling"
   },
   {
-    "repo": "tensorflow/tensorflow",
-    "enabled": false,
-    "priority": 0.6,
-    "category": "tooling"
+    "repo": "gazebosim/gz-sim",
+    "enabled": true,
+    "priority": 0.8,
+    "category": "open_source"
+  },
+  {
+    "repo": "Lifelong-Robot-Learning/LIBERO",
+    "enabled": true,
+    "priority": 0.82,
+    "category": "research"
+  },
+  {
+    "repo": "unitreerobotics/unitree_sdk2",
+    "enabled": true,
+    "priority": 0.78,
+    "category": "open_source"
   }
 ]
 
@@ -3109,7 +3320,36 @@ def test_compute_freshness_score() -> None:
 
 def test_compute_source_score_clamped() -> None:
     sc = ScoringConfig(source_weights={"arxiv": 1.0})
-    assert 0.0 <= compute_source_score("arxiv", "x", sc) <= 1.0
+    raw = RawItem(
+        source_type="arxiv",
+        source_name="x",
+        external_id="e",
+        dedupe_id="d",
+        canonical_id=None,
+        title="t",
+        text="",
+        raw_content=None,
+        url="",
+        published_at=datetime.now(timezone.utc),
+        updated_at=None,
+        meta={},
+    )
+    assert compute_source_score(raw, sc) == 1.0
+    raw_prio = RawItem(
+        source_type="arxiv",
+        source_name="x",
+        external_id="e2",
+        dedupe_id="d2",
+        canonical_id=None,
+        title="t",
+        text="",
+        raw_content=None,
+        url="",
+        published_at=datetime.now(timezone.utc),
+        updated_at=None,
+        meta={"source_priority": 0.42},
+    )
+    assert abs(compute_source_score(raw_prio, sc) - 0.42) < 1e-9
 
 
 def test_score_item_final_in_unit_interval() -> None:

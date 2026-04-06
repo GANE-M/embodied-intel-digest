@@ -11,7 +11,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from app import constants
-from app.models import KeywordRule, ScoringConfig, TrackedEntity
+from app.models import DeliveryTarget, KeywordRule, ScoringConfig, TrackedEntity
 
 
 @dataclass
@@ -101,21 +101,103 @@ def load_config() -> AppConfig:
     return cfg
 
 
+def normalize_recipients(value: Any) -> list[str]:
+    """Coerce env string or JSON value into a non-empty stripped address list."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return [str(x).strip() for x in value if str(x).strip()]
+    s = str(value).strip()
+    if not s:
+        return []
+    return [p.strip() for p in s.split(",") if p.strip()]
+
+
+def _delivery_target_from_env() -> DeliveryTarget:
+    use_ssl = (os.getenv("SMTP_USE_SSL", "") or "").lower() in ("1", "true", "yes")
+    return DeliveryTarget(
+        name="default_env",
+        smtp_host=os.getenv("SMTP_HOST", ""),
+        smtp_port=int(os.getenv("SMTP_PORT", "587")),
+        smtp_username=os.getenv("SMTP_USERNAME", ""),
+        smtp_password=os.getenv("SMTP_PASSWORD", ""),
+        email_from=os.getenv("EMAIL_FROM", ""),
+        email_to=normalize_recipients(os.getenv("EMAIL_TO", "")),
+        use_ssl=use_ssl,
+        enabled=True,
+    )
+
+
+def _parse_delivery_target_row(row: dict[str, Any]) -> DeliveryTarget | None:
+    if not row.get("enabled", True):
+        return None
+    name = str(row.get("name", "") or "target").strip() or "target"
+    host = str(row.get("smtp_host", "") or "").strip()
+    port_raw = row.get("smtp_port", 587)
+    try:
+        port = int(port_raw)
+    except (TypeError, ValueError):
+        port = 587
+    user = str(row.get("smtp_username", "") or "").strip()
+    env_key = row.get("smtp_password_env")
+    pwd = ""
+    if env_key is not None and str(env_key).strip():
+        pwd = os.getenv(str(env_key).strip(), "") or ""
+    frm = str(row.get("email_from", "") or "").strip()
+    recipients = normalize_recipients(row.get("email_to"))
+    use_ssl = bool(row.get("use_ssl", False))
+    return DeliveryTarget(
+        name=name,
+        smtp_host=host,
+        smtp_port=port,
+        smtp_username=user,
+        smtp_password=pwd,
+        email_from=frm,
+        email_to=recipients,
+        use_ssl=use_ssl,
+        enabled=True,
+    )
+
+
+def load_delivery_targets(configs_dir: Path) -> list[DeliveryTarget]:
+    """Load ``configs/delivery_targets.json`` if present and non-empty; else env fallback."""
+    path = configs_dir / "delivery_targets.json"
+    if path.is_file():
+        try:
+            data = load_json_config(path)
+        except (OSError, json.JSONDecodeError):
+            data = None
+        if isinstance(data, list) and len(data) > 0:
+            out: list[DeliveryTarget] = []
+            for row in data:
+                if not isinstance(row, dict):
+                    continue
+                t = _parse_delivery_target_row(row)
+                if t is not None:
+                    out.append(t)
+            if out:
+                return out
+    return [_delivery_target_from_env()]
+
+
 def validate_config(config: AppConfig) -> None:
-    missing: list[str] = []
-    if not config.email_to.strip():
-        missing.append("EMAIL_TO")
-    if not config.email_from.strip():
-        missing.append("EMAIL_FROM")
-    if not config.smtp_host.strip():
-        missing.append("SMTP_HOST")
-    if not config.smtp_username.strip():
-        missing.append("SMTP_USERNAME")
-    if not config.smtp_password.strip():
-        missing.append("SMTP_PASSWORD")
-    if missing:
+    targets = load_delivery_targets(config.configs_dir)
+    problems: list[str] = []
+    for t in targets:
+        prefix = f"{t.name!r}: "
+        if not t.smtp_host.strip():
+            problems.append(prefix + "smtp_host")
+        if not t.smtp_username.strip():
+            problems.append(prefix + "smtp_username")
+        if not t.smtp_password.strip():
+            problems.append(prefix + "smtp_password (or smtp_password env)")
+        if not t.email_from.strip():
+            problems.append(prefix + "email_from")
+        if not t.email_to:
+            problems.append(prefix + "email_to")
+    if problems:
         raise ValueError(
-            "Invalid SMTP / email configuration; missing: " + ", ".join(missing),
+            "Invalid delivery target configuration: " + "; ".join(problems),
         )
     if not config.configs_dir.is_dir():
         raise ValueError(f"configs_dir is not a directory: {config.configs_dir}")

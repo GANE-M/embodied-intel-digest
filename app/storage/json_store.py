@@ -1,4 +1,8 @@
-"""Minimal JSON persistence for seen ids and run metadata (v1.4)."""
+"""Minimal JSON persistence for seen ids and run metadata (v1.4).
+
+In-process cache: one load per JsonStore instance, then has_seen / mark_seen /
+save_run_metadata reuse memory and only write through to disk on mutations.
+"""
 
 from __future__ import annotations
 
@@ -17,8 +21,9 @@ class JsonStore(BaseStore):
         self._state_dir = state_dir
         self._path = state_dir / "digest_state.json"
         self._max_runs = 30
+        self._data: dict[str, Any] | None = None
 
-    def _load(self) -> dict[str, Any]:
+    def _read_file(self) -> dict[str, Any]:
         if not self._path.is_file():
             return {"dedupe_ids": [], "first_seen_at": {}, "runs": []}
         with self._path.open(encoding="utf-8") as f:
@@ -30,13 +35,19 @@ class JsonStore(BaseStore):
         data.setdefault("runs", [])
         return data
 
+    def _get_data(self) -> dict[str, Any]:
+        if self._data is None:
+            self._data = self._read_file()
+        return self._data
+
     def _save(self, data: dict[str, Any]) -> None:
         self._state_dir.mkdir(parents=True, exist_ok=True)
         with self._path.open("w", encoding="utf-8") as f:
             json.dump(data, f, ensure_ascii=False, indent=2)
+        self._data = data
 
     def load_seen_ids(self) -> set[str]:
-        data = self._load()
+        data = self._get_data()
         ids = data.get("dedupe_ids")
         if isinstance(ids, list):
             return {str(x) for x in ids}
@@ -46,7 +57,7 @@ class JsonStore(BaseStore):
         return dedupe_id in self.load_seen_ids()
 
     def mark_seen(self, items: Iterable[ProcessedItem]) -> None:
-        data = self._load()
+        data = self._get_data()
         ids = set(str(x) for x in data.get("dedupe_ids", []) if x is not None)
         fs = data.get("first_seen_at")
         if not isinstance(fs, dict):
@@ -64,7 +75,7 @@ class JsonStore(BaseStore):
         self._save(data)
 
     def save_run_metadata(self, run_metadata: RunMetadata) -> None:
-        data = self._load()
+        data = self._get_data()
         runs = data.get("runs")
         if not isinstance(runs, list):
             runs = []

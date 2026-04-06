@@ -1,0 +1,24 @@
+[
+  {
+    "name": "gmail_primary",
+    "smtp_host": "smtp.gmail.com",
+    "smtp_port": 587,
+    "smtp_username": "your@gmail.com",
+    "smtp_password_env": "SMTP_PASSWORD_GMAIL",
+    "email_from": "your@gmail.com",
+    "email_to": ["target1@example.com", "target2@example.com"],
+    "use_ssl": false,
+    "enabled": true
+  },
+  {
+    "name": "qq_secondary",
+    "smtp_host": "smtp.qq.com",
+    "smtp_port": 465,
+    "smtp_username": "your@qq.com",
+    "smtp_password_env": "SMTP_PASSWORD_QQ",
+    "email_from": "your@qq.com",
+    "email_to": ["another@example.com"],
+    "use_ssl": true,
+    "enabled": true
+  }
+]

@@ -6,7 +6,7 @@ Daily digest for embodied-AI signals: collect from several APIs and feeds, score
 
 - **Sources (implemented):** RSS/Atom (`RSSSource`), GitHub releases + recent commits (`GitHubSource`), arXiv Atom (`ArxivSource`), OpenAlex (`OpenAlexSource`), static event rows from config (`EventSource`), optional company-site hook (`CompanySiteSource` — scrape returns empty until you extend it).
 - **Pipeline:** `source → clean / classify / score / dedupe → plaintext + HTML digest → SMTP notifier`.
-- **State:** `BaseStore` with `JsonStore` (file under `STATE_DIR`) or `MemoryStore` (tests). Cross-run dedupe uses `dedupe_id`; GitHub Actions runners lose local JSON state each run unless you add external storage or a future DB backend.
+- **State:** `BaseStore` with `JsonStore` (file under `STATE_DIR`) or `MemoryStore` (tests). Cross-run dedupe uses `dedupe_id`. **GitHub Actions:** the default Ubuntu runner disk is **ephemeral** — `STATE_DIR` under `${{ github.workspace }}` is **not** preserved across scheduled runs, so the same items may be re-sent unless you point `STATE_DIR` at durable storage (S3/NFS/artifact you restore) or switch to a future DB-backed store. The workflow and this README call that out so you can plan persistence explicitly.
 
 ## Repository layout
 
@@ -32,7 +32,7 @@ pip install -r requirements.txt
 
 See `.env.example`. Important variables:
 
-- **SMTP / email:** `EMAIL_TO`, `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`
+- **SMTP / email (legacy single target):** `EMAIL_TO` (comma-separated allowed), `EMAIL_FROM`, `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, optional `SMTP_USE_SSL=true` for SMTP_SSL (e.g. QQ on 465)
 - **Subject:** `EMAIL_SUBJECT_PREFIX` (or legacy `EMAIL_SUBJECT`)
 - **Run:** `TIMEZONE`, `TOP_N`, `LOOKBACK_HOURS`, `CONFIGS_DIR`, `ARXIV_CATEGORIES`
 - **Storage:** `STORE_TYPE=json`, `STATE_DIR` (defaults to `<project>/.state` when unset)
@@ -52,6 +52,22 @@ All are **strict JSON**: top-level **arrays** `[...]`, no `//` comments, no trai
 | `tracked_repos.json` | GitHub `owner/repo`: `repo`, `enabled`, `priority`, `category` |
 | `tracked_events.json` | Event rows: `name`, `url`, `category`, `enabled` |
 | `tracked_company_sites.json` | Optional; if present, wires `CompanySiteSource` (still empty until implemented) |
+| `delivery_targets.json` | Optional; multi-SMTP delivery (see below). If missing or `[]`, env SMTP vars define one target. |
+
+### Multiple recipients and multiple SMTP servers
+
+Copy `configs/delivery_targets.example.json` to `configs/delivery_targets.json` and edit. Each object is one **delivery target**: its own `smtp_host`, `smtp_port`, `email_from`, `email_to` list, and `use_ssl`.
+
+- **Gmail / typical 587:** `use_ssl: false` → client uses `SMTP` + `STARTTLS`.
+- **QQ / common 465:** `use_ssl: true` → client uses `SMTP_SSL` (not STARTTLS on a plain socket).
+
+**Passwords:** put **no secrets in JSON**. Use `smtp_password_env` with the name of an environment variable (e.g. `SMTP_PASSWORD_GMAIL`); set the real password in `.env` locally or in GitHub **Secrets** for Actions.
+
+**Local quick test:** configure two targets with different `smtp_password_env` vars, export both passwords, run `python -m app.main`, and confirm logs show each target name.
+
+**GitHub Actions:** add secrets for each env var referenced in `delivery_targets.json` (e.g. `SMTP_PASSWORD_GMAIL`, `SMTP_PASSWORD_QQ`). You can keep using a single legacy SMTP block in the workflow instead until you commit a `delivery_targets.json` that references those secret names.
+
+**Send + dedupe policy:** the same digest body is sent through **each** enabled target. **`mark_seen` runs if at least one target succeeds**, so recipients who got mail are not re-queued; failed targets are logged and the run may be marked `partial_success`.
 
 ## Run locally
 
@@ -67,6 +83,14 @@ Workflow installs **only** `pip install -r requirements.txt`, then `python -m ap
 
 ```bash
 pytest tests/
+```
+
+## Repository hygiene (`.gitignore`)
+
+Generated paths such as `__pycache__/`, `state/`, `.state/`, `.env`, and virtualenvs are listed in `.gitignore`. If `state/` or `__pycache__/` was committed earlier, stop tracking without deleting your working copy:
+
+```bash
+git rm -r --cached state/ __pycache__/ 2>/dev/null || true
 ```
 
 ## Architecture (short)

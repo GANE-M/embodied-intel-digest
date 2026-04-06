@@ -9,14 +9,14 @@ from app import constants
 from app.config import (
     AppConfig,
     load_config,
+    load_delivery_targets,
     load_json_config,
     load_keyword_rules,
     load_scoring_config,
     load_tracked_entities,
     validate_config,
 )
-from app.models import ProcessedItem, RawItem, RunMetadata, ScoringConfig
-from app.notifiers.base import BaseNotifier
+from app.models import DeliveryTarget, ProcessedItem, RawItem, RunMetadata, ScoringConfig
 from app.notifiers.email_sender import EmailNotifier
 from app.outputs.digest_builder import (
     build_digest_subject,
@@ -92,15 +92,25 @@ def build_sources(config: AppConfig) -> list[BaseSource]:
     return sources
 
 
-def build_notifier(config: AppConfig) -> BaseNotifier:
-    return EmailNotifier(
-        config.smtp_host,
-        config.smtp_port,
-        config.smtp_username,
-        config.smtp_password,
-        config.email_from,
-        config.email_to,
-    )
+def build_email_notifiers(config: AppConfig) -> list[tuple[DeliveryTarget, EmailNotifier]]:
+    """One ``EmailNotifier`` per ``DeliveryTarget`` (multi-SMTP / multi-route)."""
+    out: list[tuple[DeliveryTarget, EmailNotifier]] = []
+    for t in load_delivery_targets(config.configs_dir):
+        out.append(
+            (
+                t,
+                EmailNotifier(
+                    t.smtp_host,
+                    t.smtp_port,
+                    t.smtp_username,
+                    t.smtp_password,
+                    t.email_from,
+                    t.email_to,
+                    use_ssl=t.use_ssl,
+                ),
+            ),
+        )
+    return out
 
 
 def collect_all_sources(
@@ -146,16 +156,15 @@ def process_items(
     return processed
 
 
-def build_and_send_digest(
+def build_digest_payload(
     items: list[ProcessedItem],
-    notifier: BaseNotifier,
     date_str: str,
     top_n: int,
-) -> None:
+) -> tuple[str, str, str]:
     subject = build_digest_subject(date_str)
     body_text = build_plaintext_digest(items, date_str, top_n)
     body_html = build_html_digest(items, date_str, top_n)
-    notifier.send(subject, body_text, body_html)
+    return subject, body_text, body_html
 
 
 def run() -> None:
@@ -167,7 +176,7 @@ def run() -> None:
     store: BaseStore = build_store(config)
     since = compute_since(config.lookback_hours)
     sources = build_sources(config)
-    notifier = build_notifier(config)
+    delivery_pairs = build_email_notifiers(config)
 
     run_id = str(uuid.uuid4())
     started_at = now_utc()
@@ -187,21 +196,49 @@ def run() -> None:
 
     date_str = format_date(now_in_tz(config.timezone), config.timezone)
     status = constants.RUN_STATUS_SUCCESS
+    delivery_failures = 0
 
+    # Digest delivery: each DeliveryTarget gets the same payload over its own SMTP.
+    # mark_seen: persist when *at least one* target succeeds, so a partial outage does
+    # not cause duplicate digests on the next run for recipients who already received mail.
     try:
         if to_send:
-            build_and_send_digest(to_send, notifier, date_str, config.top_n)
-            store.mark_seen(to_send)
-            log.info("sent digest with %d new items", len(to_send))
+            subject, body_text, body_html = build_digest_payload(
+                to_send,
+                date_str,
+                config.top_n,
+            )
+            any_ok = False
+            for target, notifier in delivery_pairs:
+                try:
+                    notifier.send(subject, body_text, body_html)
+                    any_ok = True
+                    log.info(
+                        "digest sent OK via delivery target %r (%d recipients)",
+                        target.name,
+                        len(target.email_to),
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    delivery_failures += 1
+                    log.error("digest send failed for delivery target %r: %s", target.name, exc)
+            if any_ok:
+                store.mark_seen(to_send)
+                log.info("marked %d items seen (>=1 delivery target succeeded)", len(to_send))
+            else:
+                log.error("all delivery targets failed; not marking items seen")
+                status = constants.RUN_STATUS_FAILED
+            if delivery_failures and any_ok:
+                status = constants.RUN_STATUS_PARTIAL
         else:
             log.info("no unseen items to send")
-        if source_errors:
+        if source_errors and status == constants.RUN_STATUS_SUCCESS:
             status = constants.RUN_STATUS_PARTIAL
     except Exception:
-        log.exception("digest send failed")
+        log.exception("digest pipeline failed")
         status = constants.RUN_STATUS_FAILED
 
     finished_at = now_utc()
+    err_total = len(source_errors) + delivery_failures
     store.save_run_metadata(
         RunMetadata(
             run_id=run_id,
@@ -209,7 +246,7 @@ def run() -> None:
             finished_at=finished_at,
             status=status,
             item_count=len(to_send),
-            error_count=len(source_errors),
+            error_count=err_total,
         ),
     )
 
