@@ -13,6 +13,7 @@ from app.config import (
     normalize_recipients,
     validate_config,
 )
+from app.models import FilterRules
 
 
 def test_normalize_recipients_string() -> None:
@@ -142,6 +143,8 @@ def test_validate_config_rejects_missing_password(tmp_path: Path, monkeypatch: p
         configs_dir=tmp_path,
         min_final_score=0.35,
         require_keyword_or_entity_hit=False,
+        filter_rules=FilterRules(),
+        stage2_shortlist_multiplier=2,
     )
     with pytest.raises(ValueError, match="smtp_password"):
         validate_config(cfg)
@@ -187,6 +190,8 @@ def test_validate_config_accepts_multi_target(tmp_path: Path, monkeypatch: pytes
         configs_dir=tmp_path,
         min_final_score=0.35,
         require_keyword_or_entity_hit=False,
+        filter_rules=FilterRules(),
+        stage2_shortlist_multiplier=2,
     )
     (tmp_path / "st").mkdir()
     validate_config(cfg)

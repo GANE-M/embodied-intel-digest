@@ -25,8 +25,11 @@ from app.outputs.digest_builder import (
 from app.outputs.html_builder import build_html_digest
 from app.processors.cleaner import clean_raw_item
 from app.processors.classifier import classify_item
+from app.processors.content_enricher import enrich_item_article, should_enrich_for_stage2
 from app.processors.deduper import dedupe_items, filter_new_items
+from app.processors.llm_judge import judge_item, stage2_sort_score
 from app.processors.scorer import score_item
+from app.processors.stage1_filter import passes_stage1_filters
 from app.processors.summarizer import summarize_item_zh
 from app.sources.arxiv_source import ArxivSource
 from app.sources.base import BaseSource
@@ -156,6 +159,66 @@ def process_items(
     return processed
 
 
+def select_digest_items(
+    candidates: list[ProcessedItem],
+    config: AppConfig,
+) -> list[ProcessedItem]:
+    """Stage 1 ordering, then optional Stage 2 shortlist + LLM judge + fallbacks."""
+    log = get_logger(__name__)
+    top_n = config.top_n
+    if top_n <= 0:
+        return []
+
+    mult = max(1, config.stage2_shortlist_multiplier)
+    shortlist_cap = min(len(candidates), top_n * mult)
+    shortlist = candidates[:shortlist_cap]
+
+    if not shortlist:
+        return []
+
+    api_key = (config.llm_api_key or "").strip()
+    base_url = (config.llm_base_url or "").strip()
+    if not api_key or not base_url:
+        return shortlist[:top_n]
+
+    for it in shortlist:
+        if should_enrich_for_stage2(it):
+            enrich_item_article(it, log=log)
+
+    any_parsed: bool = False
+    for it in shortlist:
+        j = judge_item(it, api_key=api_key, base_url=base_url)
+        it.llm_judgement = j
+        if j is not None:
+            any_parsed = True
+        else:
+            log.warning(
+                "stage2 llm_judge missing/failed for %s",
+                (it.title or "")[:120],
+            )
+
+    if not any_parsed:
+        log.warning("stage2: no parsed judgements; fallback to stage1 top_n")
+        return candidates[:top_n]
+
+    kept = [it for it in shortlist if it.llm_judgement and it.llm_judgement.keep]
+    kept.sort(key=lambda x: (stage2_sort_score(x), x.final_score), reverse=True)
+    out: list[ProcessedItem] = list(kept[:top_n])
+    used = {id(x) for x in out}
+
+    fallback_pool = [
+        it for it in shortlist if it.llm_judgement is None and id(it) not in used
+    ]
+    fallback_pool.sort(key=lambda x: x.final_score, reverse=True)
+    for it in fallback_pool:
+        if len(out) >= top_n:
+            break
+        out.append(it)
+        used.add(id(it))
+
+    return out
+
+
 def build_digest_payload(
     items: list[ProcessedItem],
     date_str: str,
@@ -189,10 +252,11 @@ def run() -> None:
 
     new_items = filter_new_items(processed, store)
     new_items.sort(key=lambda x: x.final_score, reverse=True)
+    new_items = [x for x in new_items if passes_stage1_filters(x, config.filter_rules)]
     candidates = [x for x in new_items if x.final_score >= config.min_final_score]
     if config.require_keyword_or_entity_hit:
         candidates = [x for x in candidates if x.matched_keywords or x.matched_entities]
-    to_send = candidates[: config.top_n]
+    to_send = select_digest_items(candidates, config)
 
     date_str = format_date(now_in_tz(config.timezone), config.timezone)
     status = constants.RUN_STATUS_SUCCESS

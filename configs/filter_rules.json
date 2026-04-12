@@ -1,0 +1,23 @@
+{
+  "title_blocklist": [
+    "forum",
+    "discourse",
+    "community update",
+    "weekly roundup",
+    "release notes",
+    "changelog",
+    "registration open",
+    "call for papers",
+    "deadline extended",
+    "meetup",
+    "webinar"
+  ],
+  "url_blocklist": [
+    "forum",
+    "discourse",
+    "/community/",
+    "meetup.com"
+  ],
+  "source_blocklist": [],
+  "source_allowlist": []
+}

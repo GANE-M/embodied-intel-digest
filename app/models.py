@@ -66,6 +66,28 @@ class RunMetadata:
 
 
 @dataclass
+class JudgementResult:
+    """Stage-2 LLM structured judgement (internal contract, not the digest body)."""
+
+    keep: bool
+    importance_score: float
+    novelty_score: float
+    brand_relevance_score: float
+    reason: str
+    content_type: str
+
+
+@dataclass
+class FilterRules:
+    """Stage-1 hard filters loaded from ``configs/filter_rules.json``."""
+
+    title_blocklist: list[str] = field(default_factory=list)
+    url_blocklist: list[str] = field(default_factory=list)
+    source_blocklist: list[str] = field(default_factory=list)
+    source_allowlist: list[str] = field(default_factory=list)
+
+
+@dataclass
 class RawItem:
     source_type: str
     source_name: str
@@ -95,3 +117,4 @@ class ProcessedItem(RawItem):
     final_score: float = 0.0
     summary_zh: str = ""
     is_update: bool = False
+    llm_judgement: JudgementResult | None = None

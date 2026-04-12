@@ -9,6 +9,20 @@ from app import constants
 from app.models import ProcessedItem
 
 
+def digest_rank_key(item: ProcessedItem) -> tuple[float, float]:
+    """Prefer Stage-2 composite when judgement exists; else Stage-1 final_score."""
+    j = item.llm_judgement
+    if j is not None:
+        primary = (
+            0.5 * j.brand_relevance_score
+            + 0.3 * j.importance_score
+            + 0.2 * j.novelty_score
+        )
+    else:
+        primary = item.final_score
+    return (primary, item.final_score)
+
+
 def sorted_category_names(categories: Iterable[str]) -> list[str]:
     order = {c: i for i, c in enumerate(constants.CATEGORIES)}
     return sorted(categories, key=lambda c: order.get(c, len(constants.CATEGORIES)))
@@ -20,7 +34,7 @@ def group_items(items: list[ProcessedItem]) -> dict[str, list[ProcessedItem]]:
         cat = it.category if it.category in constants.CATEGORIES else "media"
         groups.setdefault(cat, []).append(it)
     for key in groups:
-        groups[key].sort(key=lambda x: x.final_score, reverse=True)
+        groups[key].sort(key=lambda x: digest_rank_key(x), reverse=True)
     return groups
 
 
@@ -38,7 +52,7 @@ def build_plaintext_digest(
     date_str: str,
     top_n: int,
 ) -> str:
-    ranked = sorted(items, key=lambda x: x.final_score, reverse=True)[:top_n]
+    ranked = sorted(items, key=lambda x: digest_rank_key(x), reverse=True)[:top_n]
     hdr = (
         os.getenv("EMAIL_SUBJECT_PREFIX")
         or os.getenv("EMAIL_SUBJECT")
@@ -58,6 +72,9 @@ def build_plaintext_digest(
             flag = " [更新]" if it.is_update else ""
             lines.append(f"* {it.title}{flag}")
             lines.append(f"  {it.url}")
-            lines.append(f"  score={it.final_score:.3f} | {it.summary_zh[:200]}")
+            note = ""
+            if it.llm_judgement and it.llm_judgement.reason:
+                note = f" | note: {it.llm_judgement.reason[:220]}"
+            lines.append(f"  score={it.final_score:.3f} | {it.summary_zh[:200]}{note}")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"

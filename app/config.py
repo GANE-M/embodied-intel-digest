@@ -11,7 +11,7 @@ from typing import Any
 from dotenv import load_dotenv
 
 from app import constants
-from app.models import DeliveryTarget, KeywordRule, ScoringConfig, TrackedEntity
+from app.models import DeliveryTarget, FilterRules, KeywordRule, ScoringConfig, TrackedEntity
 
 
 @dataclass
@@ -35,6 +35,8 @@ class AppConfig:
     configs_dir: Path
     min_final_score: float
     require_keyword_or_entity_hit: bool
+    filter_rules: FilterRules
+    stage2_shortlist_multiplier: int
 
 
 def _parse_state_dir(raw: str | None) -> Path | None:
@@ -67,11 +69,23 @@ def load_config() -> AppConfig:
         llm_url = None
 
     min_final = float(os.getenv("MIN_FINAL_SCORE", str(constants.DEFAULT_MIN_FINAL_SCORE)))
-    require_hit = (os.getenv("REQUIRE_KEYWORD_OR_ENTITY_HIT", "false") or "").lower() in (
+    require_hit = (os.getenv("REQUIRE_KEYWORD_OR_ENTITY_HIT", "true") or "").lower() in (
         "1",
         "true",
         "yes",
     )
+
+    stage2_mult_raw = os.getenv(
+        "STAGE2_SHORTLIST_MULTIPLIER",
+        str(constants.DEFAULT_STAGE2_SHORTLIST_MULTIPLIER),
+    )
+    try:
+        stage2_mult = int(str(stage2_mult_raw).strip() or "2")
+    except ValueError:
+        stage2_mult = constants.DEFAULT_STAGE2_SHORTLIST_MULTIPLIER
+    stage2_mult = max(1, min(5, stage2_mult))
+
+    filter_rules = load_filter_rules(configs_dir)
 
     cfg = AppConfig(
         email_to=os.getenv("EMAIL_TO", ""),
@@ -97,6 +111,8 @@ def load_config() -> AppConfig:
         configs_dir=configs_dir,
         min_final_score=min(1.0, max(0.0, min_final)),
         require_keyword_or_entity_hit=require_hit,
+        filter_rules=filter_rules,
+        stage2_shortlist_multiplier=stage2_mult,
     )
     return cfg
 
@@ -215,6 +231,34 @@ def validate_config(config: AppConfig) -> None:
 def load_json_config(path: Path) -> Any:
     with path.open(encoding="utf-8") as f:
         return json.load(f)
+
+
+def load_filter_rules(configs_dir: Path) -> FilterRules:
+    """Load ``configs/filter_rules.json`` (minimal schema: block/allow lists)."""
+    path = configs_dir / "filter_rules.json"
+    if not path.is_file():
+        return FilterRules()
+
+    try:
+        data = load_json_config(path)
+    except (OSError, json.JSONDecodeError):
+        return FilterRules()
+
+    if not isinstance(data, dict):
+        return FilterRules()
+
+    def _str_list(key: str) -> list[str]:
+        raw = data.get(key, [])
+        if not isinstance(raw, list):
+            return []
+        return [str(x).strip() for x in raw if str(x).strip()]
+
+    return FilterRules(
+        title_blocklist=_str_list("title_blocklist"),
+        url_blocklist=_str_list("url_blocklist"),
+        source_blocklist=_str_list("source_blocklist"),
+        source_allowlist=_str_list("source_allowlist"),
+    )
 
 
 def load_keyword_rules(configs_dir: Path) -> list[KeywordRule]:
