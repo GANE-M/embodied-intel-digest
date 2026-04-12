@@ -59,39 +59,15 @@ def _load_stage2_shortlist_rules(configs_dir: Path) -> dict:
     return data
 
 
-def _match_allowlist(item: ProcessedItem, rules: dict) -> bool:
-    ent_allow = {str(x).strip().lower() for x in rules.get("entity_direct_allowlist", []) if str(x).strip()}
-    src_allow = {str(x).strip().lower() for x in rules.get("source_name_direct_allowlist", []) if str(x).strip()}
-    repo_allow = {str(x).strip().lower() for x in rules.get("repo_direct_allowlist", []) if str(x).strip()}
-
-    if item.source_name.lower() in src_allow:
-        return True
-    if any(str(e).strip().lower() in ent_allow for e in item.matched_entities):
-        return True
-    repo = ""
-    if isinstance(item.meta, dict):
-        repo = str(item.meta.get("repo", "") or "").strip().lower()
-    if repo and repo in repo_allow:
-        return True
-    return False
-
-
 def build_stage2_shortlist(candidates: list[ProcessedItem], config: AppConfig) -> list[ProcessedItem]:
-    """Build shortlist from stage1 head + optional allowlist pass-through (default off)."""
-    base = _compute_base_shortlist(candidates, config)
-    rules = _load_stage2_shortlist_rules(config.configs_dir)
-    if not bool(rules.get("allowlist_enable", False)):
-        return base
+    """Build shortlist from Stage-1 head only.
 
-    selected = list(base)
-    seen_ids = {id(x) for x in selected}
-    for item in candidates:
-        if id(item) in seen_ids:
-            continue
-        if _match_allowlist(item, rules):
-            selected.append(item)
-            seen_ids.add(id(item))
-    return selected
+    Note: allowlist structure is loaded and reserved for future use, but intentionally
+    not applied in this round.
+    """
+    base = _compute_base_shortlist(candidates, config)
+    _ = _load_stage2_shortlist_rules(config.configs_dir)
+    return base
 
 
 def select_stage2_items(
