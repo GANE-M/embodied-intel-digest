@@ -1,17 +1,5 @@
 [
   {
-    "repo": "ros2/ros2",
-    "enabled": true,
-    "priority": 0.9,
-    "category": "open_source"
-  },
-  {
-    "repo": "moveit/moveit2",
-    "enabled": true,
-    "priority": 0.88,
-    "category": "open_source"
-  },
-  {
     "repo": "isaac-sim/IsaacLab",
     "enabled": true,
     "priority": 1.0,
@@ -60,39 +48,51 @@
     "category": "research"
   },
   {
-    "repo": "ros-planning/navigation2",
-    "enabled": true,
-    "priority": 0.88,
-    "category": "open_source"
-  },
-  {
-    "repo": "microsoft/AirSim",
-    "enabled": true,
-    "priority": 0.85,
-    "category": "research"
-  },
-  {
-    "repo": "MuJoCo/mujoco",
-    "enabled": true,
-    "priority": 0.85,
-    "category": "tooling"
-  },
-  {
-    "repo": "gazebosim/gz-sim",
-    "enabled": true,
-    "priority": 0.8,
-    "category": "open_source"
-  },
-  {
     "repo": "Lifelong-Robot-Learning/LIBERO",
     "enabled": true,
     "priority": 0.82,
     "category": "research"
   },
   {
+    "repo": "ros2/ros2",
+    "enabled": false,
+    "priority": 0.5,
+    "category": "open_source"
+  },
+  {
+    "repo": "ros-planning/navigation2",
+    "enabled": false,
+    "priority": 0.5,
+    "category": "open_source"
+  },
+  {
+    "repo": "microsoft/AirSim",
+    "enabled": false,
+    "priority": 0.5,
+    "category": "research"
+  },
+  {
+    "repo": "MuJoCo/mujoco",
+    "enabled": false,
+    "priority": 0.5,
+    "category": "tooling"
+  },
+  {
+    "repo": "gazebosim/gz-sim",
+    "enabled": false,
+    "priority": 0.5,
+    "category": "open_source"
+  },
+  {
+    "repo": "moveit/moveit2",
+    "enabled": false,
+    "priority": 0.5,
+    "category": "open_source"
+  },
+  {
     "repo": "unitreerobotics/unitree_sdk2",
-    "enabled": true,
-    "priority": 0.78,
+    "enabled": false,
+    "priority": 0.5,
     "category": "open_source"
   }
 ]

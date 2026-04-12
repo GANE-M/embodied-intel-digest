@@ -163,23 +163,27 @@ def select_digest_items(
     candidates: list[ProcessedItem],
     config: AppConfig,
 ) -> list[ProcessedItem]:
-    """Stage 1 ordering, then optional Stage 2 shortlist + LLM judge + fallbacks."""
+    """Stage 1 ranking, then Stage 2 shortlist + LLM judgement (quality-first)."""
     log = get_logger(__name__)
     top_n = config.top_n
     if top_n <= 0:
         return []
 
-    mult = max(1, config.stage2_shortlist_multiplier)
-    shortlist_cap = min(len(candidates), top_n * mult)
-    shortlist = candidates[:shortlist_cap]
-
-    if not shortlist:
+    stage1_ranked_items = candidates
+    if not stage1_ranked_items:
         return []
+
+    mult = max(1, config.stage2_shortlist_multiplier)
+    shortlist_cap = min(
+        len(stage1_ranked_items),
+        max(top_n * mult, top_n + 8),
+    )
+    shortlist = stage1_ranked_items[:shortlist_cap]
 
     api_key = (config.llm_api_key or "").strip()
     base_url = (config.llm_base_url or "").strip()
     if not api_key or not base_url:
-        return shortlist[:top_n]
+        return stage1_ranked_items[:top_n]
 
     for it in shortlist:
         if should_enrich_for_stage2(it):
@@ -199,24 +203,12 @@ def select_digest_items(
 
     if not any_parsed:
         log.warning("stage2: no parsed judgements; fallback to stage1 top_n")
-        return candidates[:top_n]
+        return stage1_ranked_items[:top_n]
 
     kept = [it for it in shortlist if it.llm_judgement and it.llm_judgement.keep]
     kept.sort(key=lambda x: (stage2_sort_score(x), x.final_score), reverse=True)
-    out: list[ProcessedItem] = list(kept[:top_n])
-    used = {id(x) for x in out}
-
-    fallback_pool = [
-        it for it in shortlist if it.llm_judgement is None and id(it) not in used
-    ]
-    fallback_pool.sort(key=lambda x: x.final_score, reverse=True)
-    for it in fallback_pool:
-        if len(out) >= top_n:
-            break
-        out.append(it)
-        used.add(id(it))
-
-    return out
+    # Intentionally allow fewer than top_n for quality-first delivery.
+    return kept[:top_n]
 
 
 def build_digest_payload(

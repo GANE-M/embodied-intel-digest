@@ -10,14 +10,47 @@
     "call for papers",
     "deadline extended",
     "meetup",
-    "webinar"
+    "webinar",
+    "commentary",
+    "discussion",
+    "office hours",
+    "ama",
+    "newsletter",
+    "job posting",
+    "hiring",
+    "workshop announcement",
+    "event reminder",
+    "conference agenda",
+    "speaker lineup",
+    "maintenance update",
+    "patch release",
+    "minor update"
   ],
   "url_blocklist": [
     "forum",
     "discourse",
     "/community/",
-    "meetup.com"
+    "meetup.com",
+    "/events/",
+    "/event/",
+    "/forums/",
+    "/discussion/",
+    "/comments/",
+    "/tag/community",
+    "/category/community",
+    "/register",
+    "/registration",
+    "/cfp",
+    "/call-for-papers"
   ],
-  "source_blocklist": [],
-  "source_allowlist": []
+  "source_blocklist": [
+    "ROS Discourse"
+  ],
+  "source_allowlist": [
+    "Google AI Blog",
+    "NVIDIA Blog",
+    "OpenAI News",
+    "DeepMind Blog",
+    "Arxiv"
+  ]
 }

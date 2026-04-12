@@ -1,19 +1,5 @@
 [
   {
-    "name": "Papers With Code — Latest",
-    "url": "https://paperswithcode.com/rss/latest",
-    "category": "research",
-    "priority": 0.92,
-    "enabled": true
-  },
-  {
-    "name": "Hugging Face Blog",
-    "url": "https://huggingface.co/blog/feed.xml",
-    "category": "research",
-    "priority": 0.9,
-    "enabled": true
-  },
-  {
     "name": "Google AI Blog",
     "url": "https://blog.google/technology/ai/rss/index.xml",
     "category": "company",
@@ -42,9 +28,16 @@
     "enabled": true
   },
   {
-    "name": "ROS Discourse",
-    "url": "https://discourse.ros.org/posts.rss",
-    "category": "open_source",
+    "name": "Papers With Code — Latest",
+    "url": "https://paperswithcode.com/rss/latest",
+    "category": "research",
+    "priority": 0.9,
+    "enabled": true
+  },
+  {
+    "name": "Hugging Face Blog",
+    "url": "https://huggingface.co/blog/feed.xml",
+    "category": "research",
     "priority": 0.88,
     "enabled": true
   },
@@ -52,34 +45,27 @@
     "name": "Stanford HAI News",
     "url": "https://hai.stanford.edu/news/rss.xml",
     "category": "research",
-    "priority": 0.82,
+    "priority": 0.8,
     "enabled": true
+  },
+  {
+    "name": "ROS Discourse",
+    "url": "https://discourse.ros.org/posts.rss",
+    "category": "open_source",
+    "priority": 0.5,
+    "enabled": false
   },
   {
     "name": "MIT Technology Review",
     "url": "https://www.technologyreview.com/feed/",
     "category": "media",
-    "priority": 0.65,
+    "priority": 0.6,
     "enabled": false
   },
   {
     "name": "IEEE Spectrum",
     "url": "https://spectrum.ieee.org/rss/fulltext",
     "category": "media",
-    "priority": 0.65,
-    "enabled": false
-  },
-  {
-    "name": "Robotics Tomorrow",
-    "url": "https://www.roboticstomorrow.com/rss.php",
-    "category": "media",
-    "priority": 0.55,
-    "enabled": false
-  },
-  {
-    "name": "Unity Robotics Blog",
-    "url": "https://blog.unity.com/topic/robotics/rss.xml",
-    "category": "research",
     "priority": 0.6,
     "enabled": false
   }
