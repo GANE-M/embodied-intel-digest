@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import json
 import os
 import uuid
-from pathlib import Path
 
 from app import constants
 from app.config import (
@@ -25,13 +23,18 @@ from app.outputs.digest_builder import (
     build_plaintext_digest,
 )
 from app.outputs.html_builder import build_html_digest
+from app.outputs.review_exporter import export_review_runs
 from app.processors.cleaner import clean_raw_item
 from app.processors.classifier import classify_item
-from app.processors.content_enricher import enrich_item_article, should_enrich_for_stage2
 from app.processors.deduper import dedupe_items, filter_new_items
-from app.processors.llm_judge import judge_item, stage2_sort_score
 from app.processors.scorer import score_item
 from app.processors.stage1_filter import passes_stage1_filters
+from app.processors.stage2_selector import (
+    STAGE2_FAILED,
+    STAGE2_SUCCESS_EMPTY,
+    STAGE2_UNAVAILABLE,
+    select_stage2_items,
+)
 from app.processors.summarizer import summarize_item_zh
 from app.sources.arxiv_source import ArxivSource
 from app.sources.base import BaseSource
@@ -161,93 +164,6 @@ def process_items(
     return processed
 
 
-def _compute_stage2_shortlist(candidates: list[ProcessedItem], config: AppConfig) -> list[ProcessedItem]:
-    """Return Stage-2 shortlist from Stage-1 ranked candidates."""
-    if config.top_n <= 0 or not candidates:
-        return []
-    mult = max(1, config.stage2_shortlist_multiplier)
-    shortlist_cap = min(
-        len(candidates),
-        max(config.top_n * mult, config.top_n + 8),
-    )
-    return candidates[:shortlist_cap]
-
-
-def _build_review_record(item: ProcessedItem) -> dict:
-    """Minimal audit record for review export."""
-    llm = item.llm_judgement
-    return {
-        "title": item.title,
-        "url": item.url,
-        "source_name": item.source_name,
-        "source_type": item.source_type,
-        "category": item.category,
-        "published_at": item.published_at.isoformat() if item.published_at else "",
-        "final_score": item.final_score,
-        "matched_keywords": item.matched_keywords,
-        "matched_entities": item.matched_entities,
-        "llm_judgement": {
-            "keep": llm.keep if llm is not None else None,
-            "reason": llm.reason if llm is not None else None,
-        },
-    }
-
-
-def _write_review_jsonl(path: Path, items: list[ProcessedItem]) -> None:
-    """Write audit JSONL file (UTF-8), one record per line."""
-    path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8") as f:
-        for item in items:
-            f.write(json.dumps(_build_review_record(item), ensure_ascii=False) + "\n")
-
-
-def select_digest_items(
-    candidates: list[ProcessedItem],
-    config: AppConfig,
-) -> tuple[list[ProcessedItem], bool]:
-    """Stage 1 ranking, then Stage 2 shortlist + LLM judgement (quality-first)."""
-    log = get_logger(__name__)
-    top_n = config.top_n
-    if top_n <= 0:
-        return [], False
-
-    stage1_ranked_items = candidates
-    if not stage1_ranked_items:
-        return [], False
-
-    shortlist = _compute_stage2_shortlist(stage1_ranked_items, config)
-
-    api_key = (config.llm_api_key or "").strip()
-    base_url = (config.llm_base_url or "").strip()
-    if not api_key or not base_url:
-        log.warning("stage2 degraded: stage2 not enabled, fallback to stage1 top_n")
-        return stage1_ranked_items[:top_n], True
-
-    for it in shortlist:
-        if should_enrich_for_stage2(it):
-            enrich_item_article(it, log=log)
-
-    any_parsed: bool = False
-    for it in shortlist:
-        j = judge_item(it, api_key=api_key, base_url=base_url)
-        it.llm_judgement = j
-        if j is not None:
-            any_parsed = True
-        else:
-            log.warning(
-                "stage2 llm_judge missing/failed for %s",
-                (it.title or "")[:120],
-            )
-
-    if not any_parsed:
-        log.warning("stage2 degraded: no parsed judgements, fallback to stage1 top_n")
-        return stage1_ranked_items[:top_n], True
-
-    kept = [it for it in shortlist if it.llm_judgement and it.llm_judgement.keep]
-    kept.sort(key=lambda x: (stage2_sort_score(x), x.final_score), reverse=True)
-    # Intentionally allow fewer than top_n for quality-first delivery.
-    return kept[:top_n], False
-
 
 def build_digest_payload(
     items: list[ProcessedItem],
@@ -286,22 +202,20 @@ def run() -> None:
     candidates = [x for x in new_items if x.final_score >= config.min_final_score]
     if config.require_keyword_or_entity_hit:
         candidates = [x for x in candidates if x.matched_keywords or x.matched_entities]
-    to_send, stage2_degraded = select_digest_items(candidates, config)
+    to_send, stage2_status, stage2_shortlist = select_stage2_items(candidates, config, log)
 
-    review_base = (
-        (config.state_dir or Path(".state"))
-        / "review_runs"
-        / run_id
+    export_review_runs(
+        config.state_dir,
+        run_id,
+        candidates,
+        stage2_shortlist,
+        to_send,
+        log,
     )
-    _write_review_jsonl(review_base / "stage1_candidates.jsonl", candidates)
-    _write_review_jsonl(
-        review_base / "stage2_shortlist.jsonl",
-        _compute_stage2_shortlist(candidates, config),
-    )
-    _write_review_jsonl(review_base / "final_to_send.jsonl", to_send)
 
     date_str = format_date(now_in_tz(config.timezone), config.timezone)
     status = constants.RUN_STATUS_SUCCESS
+    stage2_degraded = stage2_status in (STAGE2_UNAVAILABLE, STAGE2_FAILED)
     if stage2_degraded:
         status = constants.RUN_STATUS_PARTIAL
     delivery_failures = 0
@@ -318,7 +232,10 @@ def run() -> None:
             )
             if stage2_degraded:
                 subject = f"[DEGRADED_STAGE1_ONLY] {subject}"
-                log.warning("stage2 degraded: sending digest with stage1-only fallback")
+                log.warning(
+                    "stage2 degraded (%s): sending digest with stage1 fallback",
+                    stage2_status,
+                )
             any_ok = False
             for target, notifier in delivery_pairs:
                 try:
