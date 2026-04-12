@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+import json
 import os
 import uuid
+from pathlib import Path
 
 from app import constants
 from app.config import (
@@ -159,6 +161,46 @@ def process_items(
     return processed
 
 
+def _compute_stage2_shortlist(candidates: list[ProcessedItem], config: AppConfig) -> list[ProcessedItem]:
+    """Return Stage-2 shortlist from Stage-1 ranked candidates."""
+    if config.top_n <= 0 or not candidates:
+        return []
+    mult = max(1, config.stage2_shortlist_multiplier)
+    shortlist_cap = min(
+        len(candidates),
+        max(config.top_n * mult, config.top_n + 8),
+    )
+    return candidates[:shortlist_cap]
+
+
+def _build_review_record(item: ProcessedItem) -> dict:
+    """Minimal audit record for review export."""
+    llm = item.llm_judgement
+    return {
+        "title": item.title,
+        "url": item.url,
+        "source_name": item.source_name,
+        "source_type": item.source_type,
+        "category": item.category,
+        "published_at": item.published_at.isoformat() if item.published_at else "",
+        "final_score": item.final_score,
+        "matched_keywords": item.matched_keywords,
+        "matched_entities": item.matched_entities,
+        "llm_judgement": {
+            "keep": llm.keep if llm is not None else None,
+            "reason": llm.reason if llm is not None else None,
+        },
+    }
+
+
+def _write_review_jsonl(path: Path, items: list[ProcessedItem]) -> None:
+    """Write audit JSONL file (UTF-8), one record per line."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as f:
+        for item in items:
+            f.write(json.dumps(_build_review_record(item), ensure_ascii=False) + "\n")
+
+
 def select_digest_items(
     candidates: list[ProcessedItem],
     config: AppConfig,
@@ -173,12 +215,7 @@ def select_digest_items(
     if not stage1_ranked_items:
         return []
 
-    mult = max(1, config.stage2_shortlist_multiplier)
-    shortlist_cap = min(
-        len(stage1_ranked_items),
-        max(top_n * mult, top_n + 8),
-    )
-    shortlist = stage1_ranked_items[:shortlist_cap]
+    shortlist = _compute_stage2_shortlist(stage1_ranked_items, config)
 
     api_key = (config.llm_api_key or "").strip()
     base_url = (config.llm_base_url or "").strip()
@@ -249,6 +286,18 @@ def run() -> None:
     if config.require_keyword_or_entity_hit:
         candidates = [x for x in candidates if x.matched_keywords or x.matched_entities]
     to_send = select_digest_items(candidates, config)
+
+    review_base = (
+        (config.state_dir or Path(".state"))
+        / "review_runs"
+        / run_id
+    )
+    _write_review_jsonl(review_base / "stage1_candidates.jsonl", candidates)
+    _write_review_jsonl(
+        review_base / "stage2_shortlist.jsonl",
+        _compute_stage2_shortlist(candidates, config),
+    )
+    _write_review_jsonl(review_base / "final_to_send.jsonl", to_send)
 
     date_str = format_date(now_in_tz(config.timezone), config.timezone)
     status = constants.RUN_STATUS_SUCCESS
