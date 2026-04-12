@@ -204,23 +204,24 @@ def _write_review_jsonl(path: Path, items: list[ProcessedItem]) -> None:
 def select_digest_items(
     candidates: list[ProcessedItem],
     config: AppConfig,
-) -> list[ProcessedItem]:
+) -> tuple[list[ProcessedItem], bool]:
     """Stage 1 ranking, then Stage 2 shortlist + LLM judgement (quality-first)."""
     log = get_logger(__name__)
     top_n = config.top_n
     if top_n <= 0:
-        return []
+        return [], False
 
     stage1_ranked_items = candidates
     if not stage1_ranked_items:
-        return []
+        return [], False
 
     shortlist = _compute_stage2_shortlist(stage1_ranked_items, config)
 
     api_key = (config.llm_api_key or "").strip()
     base_url = (config.llm_base_url or "").strip()
     if not api_key or not base_url:
-        return stage1_ranked_items[:top_n]
+        log.warning("stage2 degraded: stage2 not enabled, fallback to stage1 top_n")
+        return stage1_ranked_items[:top_n], True
 
     for it in shortlist:
         if should_enrich_for_stage2(it):
@@ -239,13 +240,13 @@ def select_digest_items(
             )
 
     if not any_parsed:
-        log.warning("stage2: no parsed judgements; fallback to stage1 top_n")
-        return stage1_ranked_items[:top_n]
+        log.warning("stage2 degraded: no parsed judgements, fallback to stage1 top_n")
+        return stage1_ranked_items[:top_n], True
 
     kept = [it for it in shortlist if it.llm_judgement and it.llm_judgement.keep]
     kept.sort(key=lambda x: (stage2_sort_score(x), x.final_score), reverse=True)
     # Intentionally allow fewer than top_n for quality-first delivery.
-    return kept[:top_n]
+    return kept[:top_n], False
 
 
 def build_digest_payload(
@@ -285,7 +286,7 @@ def run() -> None:
     candidates = [x for x in new_items if x.final_score >= config.min_final_score]
     if config.require_keyword_or_entity_hit:
         candidates = [x for x in candidates if x.matched_keywords or x.matched_entities]
-    to_send = select_digest_items(candidates, config)
+    to_send, stage2_degraded = select_digest_items(candidates, config)
 
     review_base = (
         (config.state_dir or Path(".state"))
@@ -301,6 +302,8 @@ def run() -> None:
 
     date_str = format_date(now_in_tz(config.timezone), config.timezone)
     status = constants.RUN_STATUS_SUCCESS
+    if stage2_degraded:
+        status = constants.RUN_STATUS_PARTIAL
     delivery_failures = 0
 
     # Digest delivery: each DeliveryTarget gets the same payload over its own SMTP.
@@ -313,6 +316,9 @@ def run() -> None:
                 date_str,
                 config.top_n,
             )
+            if stage2_degraded:
+                subject = f"[DEGRADED_STAGE1_ONLY] {subject}"
+                log.warning("stage2 degraded: sending digest with stage1-only fallback")
             any_ok = False
             for target, notifier in delivery_pairs:
                 try:
