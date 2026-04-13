@@ -142,35 +142,35 @@
   {
     "pattern": "open-sourced",
     "match_type": "literal",
-    "weight": 0.7,
+    "weight": 0.85,
     "case_sensitive": false,
     "category_hint": "open_source"
   },
   {
     "pattern": "code released",
     "match_type": "literal",
-    "weight": 0.68,
+    "weight": 0.82,
     "case_sensitive": false,
     "category_hint": "open_source"
   },
   {
     "pattern": "code available",
     "match_type": "literal",
-    "weight": 0.66,
+    "weight": 0.78,
     "case_sensitive": false,
     "category_hint": "open_source"
   },
   {
     "pattern": "released on github",
     "match_type": "literal",
-    "weight": 0.72,
+    "weight": 0.8,
     "case_sensitive": false,
     "category_hint": "open_source"
   },
   {
     "pattern": "weights released",
     "match_type": "literal",
-    "weight": 0.62,
+    "weight": 0.8,
     "case_sensitive": false,
     "category_hint": "open_source"
   },
@@ -184,14 +184,14 @@
   {
     "pattern": "new framework",
     "match_type": "literal",
-    "weight": 0.58,
+    "weight": 0.72,
     "case_sensitive": false,
     "category_hint": "open_source"
   },
   {
     "pattern": "new library",
     "match_type": "literal",
-    "weight": 0.56,
+    "weight": 0.72,
     "case_sensitive": false,
     "category_hint": "open_source"
   },
@@ -199,6 +199,13 @@
     "pattern": "sdk released",
     "match_type": "literal",
     "weight": 0.55,
+    "case_sensitive": false,
+    "category_hint": "open_source"
+  },
+  {
+    "pattern": "new benchmark",
+    "match_type": "literal",
+    "weight": 0.72,
     "case_sensitive": false,
     "category_hint": "open_source"
   }
