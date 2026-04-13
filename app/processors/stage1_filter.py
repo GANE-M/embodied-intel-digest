@@ -30,15 +30,15 @@ def passes_stage1_filters(item: ProcessedItem, rules: FilterRules) -> bool:
             return False
 
     if rules.source_allowlist:
-        allowed = False
         for phrase in rules.source_allowlist:
             p = (phrase or "").lower()
             if not p:
                 continue
             if p == st or p in sn:
-                allowed = True
-                break
-        if not allowed:
-            return False
+                # Preferred-pass semantics: allowlisted sources pass Stage-1 hard filter.
+                return True
+
+        # Non-allowlisted items are still eligible; do not reject here.
+        return True
 
     return True

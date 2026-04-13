@@ -1,0 +1,22 @@
+{
+  "dedupe_ids": [],
+  "first_seen_at": {},
+  "runs": [
+    {
+      "run_id": "88258027-6da0-477a-9f28-d7784d6c430d",
+      "started_at": "2026-04-12T19:27:47.911110+00:00",
+      "finished_at": "2026-04-12T19:28:28.195567+00:00",
+      "status": "success",
+      "item_count": 0,
+      "error_count": 0
+    },
+    {
+      "run_id": "1cae39f9-2161-4ed3-95e0-790c483b6c3d",
+      "started_at": "2026-04-12T20:13:16.676088+00:00",
+      "finished_at": "2026-04-12T20:14:12.398100+00:00",
+      "status": "success",
+      "item_count": 0,
+      "error_count": 0
+    }
+  ]
+}
