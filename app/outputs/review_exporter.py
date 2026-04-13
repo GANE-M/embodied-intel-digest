@@ -37,7 +37,7 @@ def _write_jsonl(path: Path, items: list[ProcessedItem]) -> None:
 def export_review_runs(
     state_dir: Path | None,
     run_id: str,
-    stage1_candidates: list[ProcessedItem],
+    stage1_input_items: list[ProcessedItem],
     stage2_shortlist: list[ProcessedItem],
     final_to_send: list[ProcessedItem],
     log,
@@ -45,7 +45,7 @@ def export_review_runs(
     """Export review JSONLs. Never raise (best effort)."""
     try:
         base = (state_dir or Path(".state")) / "review_runs" / run_id
-        _write_jsonl(base / "stage1_input.jsonl", stage1_candidates)
+        _write_jsonl(base / "stage1_input.jsonl", stage1_input_items)
         _write_jsonl(base / "stage2_shortlist.jsonl", stage2_shortlist)
         _write_jsonl(base / "final_to_send.jsonl", final_to_send)
     except Exception as exc:  # noqa: BLE001

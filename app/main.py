@@ -227,7 +227,7 @@ def run() -> None:
     export_review_runs(
         config.state_dir,
         run_id,
-        candidates,
+        new_items,
         stage2_shortlist,
         to_send,
         log,
