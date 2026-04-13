@@ -138,5 +138,68 @@
     "weight": 0.77,
     "case_sensitive": false,
     "category_hint": "research"
+  },
+  {
+    "pattern": "open-sourced",
+    "match_type": "literal",
+    "weight": 0.7,
+    "case_sensitive": false,
+    "category_hint": "open_source"
+  },
+  {
+    "pattern": "code released",
+    "match_type": "literal",
+    "weight": 0.68,
+    "case_sensitive": false,
+    "category_hint": "open_source"
+  },
+  {
+    "pattern": "code available",
+    "match_type": "literal",
+    "weight": 0.66,
+    "case_sensitive": false,
+    "category_hint": "open_source"
+  },
+  {
+    "pattern": "released on github",
+    "match_type": "literal",
+    "weight": 0.72,
+    "case_sensitive": false,
+    "category_hint": "open_source"
+  },
+  {
+    "pattern": "weights released",
+    "match_type": "literal",
+    "weight": 0.62,
+    "case_sensitive": false,
+    "category_hint": "open_source"
+  },
+  {
+    "pattern": "model released",
+    "match_type": "literal",
+    "weight": 0.6,
+    "case_sensitive": false,
+    "category_hint": "open_source"
+  },
+  {
+    "pattern": "new framework",
+    "match_type": "literal",
+    "weight": 0.58,
+    "case_sensitive": false,
+    "category_hint": "open_source"
+  },
+  {
+    "pattern": "new library",
+    "match_type": "literal",
+    "weight": 0.56,
+    "case_sensitive": false,
+    "category_hint": "open_source"
+  },
+  {
+    "pattern": "sdk released",
+    "match_type": "literal",
+    "weight": 0.55,
+    "case_sensitive": false,
+    "category_hint": "open_source"
   }
 ]

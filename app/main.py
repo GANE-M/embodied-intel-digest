@@ -129,11 +129,16 @@ def collect_all_sources(
     out: list[RawItem] = []
     errors: list[dict] = []
     for src in sources:
+        class_name = type(src).__name__
         try:
-            out.extend(src.fetch(since))
+            fetched = src.fetch(since)
+            n = len(fetched)
+            log.info("%s fetched %d items", class_name, n)
+            out.extend(fetched)
         except Exception as exc:  # noqa: BLE001
-            st = getattr(src, "source_type", type(src).__name__)
+            st = getattr(src, "source_type", class_name)
             errors.append({"source_type": st, "error": str(exc)})
+            log.info("%s fetched %d items", class_name, 0)
             log.warning("source %s failed: %s", st, exc)
     return out, errors
 

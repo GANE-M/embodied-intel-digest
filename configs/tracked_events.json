@@ -3,43 +3,43 @@
     "name": "Robotics: Science and Systems (RSS)",
     "url": "https://roboticsconference.org/",
     "category": "conference",
-    "enabled": true
+    "enabled": false
   },
   {
     "name": "Conference on Robot Learning (CoRL)",
     "url": "https://www.corl.org/",
     "category": "conference",
-    "enabled": true
+    "enabled": false
   },
   {
     "name": "IEEE ICRA",
     "url": "https://www.ieee-icra.org/",
     "category": "conference",
-    "enabled": true
+    "enabled": false
   },
   {
     "name": "IEEE/RSJ IROS",
     "url": "https://www.iros.org/",
     "category": "conference",
-    "enabled": true
+    "enabled": false
   },
   {
     "name": "ROSCon",
     "url": "https://roscon.ros.org/",
     "category": "community_event",
-    "enabled": true
+    "enabled": false
   },
   {
     "name": "NVIDIA GTC",
     "url": "https://www.nvidia.com/gtc/",
     "category": "summit",
-    "enabled": true
+    "enabled": false
   },
   {
     "name": "NeurIPS",
     "url": "https://neurips.cc/",
     "category": "conference",
-    "enabled": true
+    "enabled": false
   },
   {
     "name": "Humanoids (symposium series)",

@@ -11,6 +11,9 @@ def passes_stage1_filters(item: ProcessedItem, rules: FilterRules) -> bool:
     url = (item.url or "").lower()
     st = (item.source_type or "").lower()
     sn = (item.source_name or "").lower()
+    repo_name = ""
+    if isinstance(item.meta, dict):
+        repo_name = str(item.meta.get("repo_name", "") or "").lower()
 
     for phrase in rules.title_blocklist:
         p = (phrase or "").lower()
@@ -34,7 +37,7 @@ def passes_stage1_filters(item: ProcessedItem, rules: FilterRules) -> bool:
             p = (phrase or "").lower()
             if not p:
                 continue
-            if p == st or p in sn:
+            if p == st or p in sn or p == repo_name or title.startswith(f"[{p}]"):
                 meta = item.meta if isinstance(item.meta, dict) else {}
                 meta["stage1_allowlisted"] = True
                 item.meta = meta

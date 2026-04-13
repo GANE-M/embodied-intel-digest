@@ -51,6 +51,9 @@
     "NVIDIA Blog",
     "OpenAI News",
     "DeepMind Blog",
-    "Arxiv"
+    "huggingface/lerobot",
+    "openvla/openvla",
+    "isaac-sim/IsaacLab",
+    "Physical-Intelligence/openpi"
   ]
 }
