@@ -17,6 +17,34 @@ def _chat_completions_url(base_url: str) -> str:
     return str(base_url).rstrip("/") + "/v1/chat/completions"
 
 
+def _extract_possible_json_text(text: str) -> str | None:
+    s = (text or "").strip()
+    if not s:
+        return None
+
+    # 1) fenced code block, optionally with json language tag
+    m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", s, flags=re.IGNORECASE)
+    if m:
+        body = (m.group(1) or "").strip()
+        if body:
+            return body
+
+    # 2) extract first top-level JSON object by brace balance
+    start = s.find("{")
+    if start >= 0:
+        depth = 0
+        for i in range(start, len(s)):
+            ch = s[i]
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    return s[start : i + 1]
+
+    return None
+
+
 def _parse_judgement_payload(text: str) -> JudgementResult | None:
     s = (text or "").strip()
     if not s:
@@ -24,11 +52,11 @@ def _parse_judgement_payload(text: str) -> JudgementResult | None:
     try:
         data = json.loads(s)
     except json.JSONDecodeError:
-        m = re.search(r"\{[\s\S]*\}\s*$", s)
-        if not m:
+        candidate = _extract_possible_json_text(s)
+        if not candidate:
             return None
         try:
-            data = json.loads(m.group(0))
+            data = json.loads(candidate)
         except json.JSONDecodeError:
             return None
     if not isinstance(data, dict):

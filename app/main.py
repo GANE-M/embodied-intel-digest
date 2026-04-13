@@ -199,9 +199,29 @@ def run() -> None:
     new_items = filter_new_items(processed, store)
     new_items.sort(key=lambda x: x.final_score, reverse=True)
     new_items = [x for x in new_items if passes_stage1_filters(x, config.filter_rules)]
-    candidates = [x for x in new_items if x.final_score >= config.min_final_score]
+
+    allowlisted_items = [
+        x for x in new_items if isinstance(x.meta, dict) and bool(x.meta.get("stage1_allowlisted", False))
+    ]
+    regular_items = [
+        x for x in new_items if not (isinstance(x.meta, dict) and bool(x.meta.get("stage1_allowlisted", False)))
+    ]
+
+    regular_candidates = [x for x in regular_items if x.final_score >= config.min_final_score]
     if config.require_keyword_or_entity_hit:
-        candidates = [x for x in candidates if x.matched_keywords or x.matched_entities]
+        regular_candidates = [
+            x for x in regular_candidates if x.matched_keywords or x.matched_entities
+        ]
+
+    candidates = allowlisted_items + regular_candidates
+    candidates.sort(
+        key=lambda x: (
+            1 if (isinstance(x.meta, dict) and bool(x.meta.get("stage1_allowlisted", False))) else 0,
+            x.final_score,
+        ),
+        reverse=True,
+    )
+
     to_send, stage2_status, stage2_shortlist = select_stage2_items(candidates, config, log)
 
     export_review_runs(

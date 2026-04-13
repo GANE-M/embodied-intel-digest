@@ -24,21 +24,23 @@ def build_dedupe_key(item: RawItem | ProcessedItem) -> str:
 
 
 def dedupe_items(items: list[ProcessedItem]) -> list[ProcessedItem]:
-    best: dict[str, ProcessedItem] = {}
+    groups: dict[str, list[ProcessedItem]] = {}
     for it in items:
         key = build_dedupe_key(it)
-        prev = best.get(key)
-        if prev is None:
-            it.is_update = False
-            best[key] = it
-            continue
-        replace = it.final_score > prev.final_score or (
-            it.final_score == prev.final_score and it.published_at > prev.published_at
+        groups.setdefault(key, []).append(it)
+
+    out: list[ProcessedItem] = []
+    for key in sorted(groups.keys()):
+        grp = groups[key]
+        grp_sorted = sorted(
+            grp,
+            key=lambda x: (x.final_score, x.published_at, x.external_id, x.url, x.title),
+            reverse=True,
         )
-        if replace:
-            it.is_update = True
-            best[key] = it
-    return list(best.values())
+        winner = grp_sorted[0]
+        winner.is_update = len(grp_sorted) > 1
+        out.append(winner)
+    return out
 
 
 def filter_unseen_items(items: list[ProcessedItem], store: BaseStore) -> list[ProcessedItem]:

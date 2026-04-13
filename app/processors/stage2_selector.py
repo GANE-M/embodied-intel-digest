@@ -94,7 +94,14 @@ def select_stage2_items(
     try:
         for it in shortlist:
             if should_enrich_for_stage2(it):
-                enrich_item_article(it, log=log)
+                try:
+                    enrich_item_article(it, log=log)
+                except Exception as exc:  # noqa: BLE001
+                    log.warning(
+                        "stage2 enrich failed for %s (continue with text): %s",
+                        (it.title or "")[:120],
+                        exc,
+                    )
 
         any_parsed = False
         for it in shortlist:

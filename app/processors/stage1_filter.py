@@ -35,7 +35,9 @@ def passes_stage1_filters(item: ProcessedItem, rules: FilterRules) -> bool:
             if not p:
                 continue
             if p == st or p in sn:
-                # Preferred-pass semantics: allowlisted sources pass Stage-1 hard filter.
+                meta = item.meta if isinstance(item.meta, dict) else {}
+                meta["stage1_allowlisted"] = True
+                item.meta = meta
                 return True
 
         # Non-allowlisted items are still eligible; do not reject here.
