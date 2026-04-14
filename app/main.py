@@ -170,6 +170,41 @@ def process_items(
 
 
 
+def _generate_final_bilingual_summaries(
+    items: list[ProcessedItem],
+    config: AppConfig,
+    log,
+) -> None:
+    from app.processors.llm_judge import build_deepseek_bilingual_summary
+
+    api_key = (config.llm_api_key or "").strip()
+    base_url = (config.llm_base_url or "").strip()
+    if not api_key or not base_url:
+        log.warning("bilingual summary skipped: DeepSeek config missing")
+        return
+
+    for item in items:
+        try:
+            summary_en, summary_zh_final = build_deepseek_bilingual_summary(
+                item,
+                api_key=api_key,
+                base_url=base_url,
+                model=config.llm_model,
+                timeout_sec=config.llm_timeout_sec,
+                max_tokens=config.llm_max_tokens,
+            )
+            if summary_en or summary_zh_final:
+                item.summary_en = summary_en
+                item.summary_zh_final = summary_zh_final
+            else:
+                if not item.summary_zh_final:
+                    item.summary_zh_final = item.summary_zh
+        except Exception as exc:  # noqa: BLE001
+            log.warning("bilingual summary failed for %s: %s", (item.title or "")[:120], exc)
+            if not item.summary_zh_final:
+                item.summary_zh_final = item.summary_zh
+
+
 def build_digest_payload(
     items: list[ProcessedItem],
     date_str: str,
@@ -235,6 +270,8 @@ def run() -> None:
     )
 
     to_send, stage2_status, stage2_shortlist = select_stage2_items(candidates, config, log)
+
+    _generate_final_bilingual_summaries(to_send, config, log)
 
     export_review_runs(
         config.state_dir,

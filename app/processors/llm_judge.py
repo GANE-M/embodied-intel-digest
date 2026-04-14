@@ -22,14 +22,12 @@ def _extract_possible_json_text(text: str) -> str | None:
     if not s:
         return None
 
-    # 1) fenced code block, optionally with json language tag
     m = re.search(r"```(?:json)?\s*([\s\S]*?)\s*```", s, flags=re.IGNORECASE)
     if m:
         body = (m.group(1) or "").strip()
         if body:
             return body
 
-    # 2) extract first top-level JSON object by brace balance
     start = s.find("{")
     if start >= 0:
         depth = 0
@@ -41,7 +39,6 @@ def _extract_possible_json_text(text: str) -> str | None:
                 depth -= 1
                 if depth == 0:
                     return s[start : i + 1]
-
     return None
 
 
@@ -80,6 +77,13 @@ def _parse_judgement_payload(text: str) -> JudgementResult | None:
     )
 
 
+def _normalize_base_url(base_url: str) -> str:
+    s = str(base_url or "").strip().rstrip("/")
+    if s.endswith("/v1"):
+        s = s[:-3]
+    return s.rstrip("/")
+
+
 def judge_item(
     item: ProcessedItem,
     *,
@@ -87,13 +91,14 @@ def judge_item(
     base_url: str,
     model: str | None = None,
     timeout_sec: float = 75.0,
+    max_tokens: int = 768,
 ) -> JudgementResult | None:
     """Return structured judgement or None on failure / empty input."""
     body = (item.raw_content or item.text or "").strip()
     if not body:
         return None
-    mdl = (model or os.getenv("LLM_MODEL") or "gpt-4o-mini").strip()
-    url = _chat_completions_url(base_url)
+    mdl = (model or os.getenv("LLM_MODEL") or "deepseek-chat").strip()
+    url = _chat_completions_url(_normalize_base_url(base_url))
     headers = {
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
@@ -122,6 +127,7 @@ def judge_item(
             {"role": "user", "content": user},
         ],
         "temperature": 0.2,
+        "max_tokens": max_tokens,
     }
     payload_json = dict(payload)
     payload_json["response_format"] = {"type": "json_object"}
@@ -140,6 +146,98 @@ def judge_item(
         return _parse_judgement_payload(str(msg))
     except (requests.RequestException, ValueError, KeyError, TypeError):
         return None
+
+
+def _parse_summary_payload(text: str) -> tuple[str, str] | None:
+    s = (text or "").strip()
+    if not s:
+        return None
+    try:
+        data = json.loads(s)
+    except json.JSONDecodeError:
+        candidate = _extract_possible_json_text(s)
+        if not candidate:
+            return None
+        try:
+            data = json.loads(candidate)
+        except json.JSONDecodeError:
+            return None
+    if not isinstance(data, dict):
+        return None
+    en = str(data.get("summary_en", "") or "").strip()
+    zh = str(data.get("summary_zh", "") or "").strip()
+    if not en and not zh:
+        return None
+    return en, zh
+
+
+def build_deepseek_bilingual_summary(
+    item: ProcessedItem,
+    *,
+    api_key: str,
+    base_url: str,
+    model: str = "deepseek-chat",
+    timeout_sec: float = 75.0,
+    max_tokens: int = 768,
+) -> tuple[str, str]:
+    """Best-effort bilingual summary for final to_send items."""
+    body = (item.raw_content or item.text or "").strip()
+    if not body:
+        return "", ""
+
+    url = _chat_completions_url(_normalize_base_url(base_url))
+    headers = {
+        "Authorization": f"Bearer {api_key}",
+        "Content-Type": "application/json",
+    }
+    source_context = (
+        f"Title: {item.title}\nSource: {item.source_name} ({item.source_type})\n"
+        f"Category: {item.category}\nURL: {item.url}\n"
+    )
+    user = (
+        source_context
+        + "\nWrite an English summary in 150-200 words for a business audience. "
+        + "Do not use bullet points. Then provide a faithful Chinese translation. "
+        + "Return JSON with keys summary_en and summary_zh only.\n\n"
+        + f"Text:\n{safe_truncate(body, 12000)}"
+    )
+    payload: dict[str, Any] = {
+        "model": model,
+        "messages": [
+            {
+                "role": "system",
+                "content": (
+                    "You are a bilingual technology editor for a brand team's digest. "
+                    "Summarize accurately and conservatively."
+                ),
+            },
+            {"role": "user", "content": user},
+        ],
+        "temperature": 0.2,
+        "max_tokens": max_tokens,
+    }
+    payload_json = dict(payload)
+    payload_json["response_format"] = {"type": "json_object"}
+
+    def _post(p: dict[str, Any]) -> requests.Response:
+        return requests.post(url, headers=headers, json=p, timeout=timeout_sec)
+
+    try:
+        resp = _post(payload_json)
+        if resp.status_code >= 400:
+            resp = _post(payload)
+        resp.raise_for_status()
+        data = resp.json()
+        choice = (data.get("choices") or [{}])[0]
+        msg = (choice.get("message") or {}).get("content") or ""
+        parsed = _parse_summary_payload(str(msg))
+        if parsed:
+            return parsed
+        if payload_json is not payload:
+            return "", ""
+        return "", ""
+    except (requests.RequestException, ValueError, KeyError, TypeError):
+        return "", ""
 
 
 def stage2_sort_score(item: ProcessedItem) -> float:

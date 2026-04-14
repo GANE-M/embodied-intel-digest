@@ -116,5 +116,7 @@ class ProcessedItem(RawItem):
     source_score: float = 0.0
     final_score: float = 0.0
     summary_zh: str = ""
+    summary_en: str = ""
+    summary_zh_final: str = ""
     is_update: bool = False
     llm_judgement: JudgementResult | None = None

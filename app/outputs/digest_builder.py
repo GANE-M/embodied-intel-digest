@@ -47,6 +47,20 @@ def build_digest_subject(date_str: str) -> str:
     return f"{prefix} | {date_str}"
 
 
+def _summary_block(item: ProcessedItem) -> str:
+    en = (getattr(item, "summary_en", "") or "").strip()
+    zh = (getattr(item, "summary_zh_final", "") or "").strip()
+    if not en and not zh:
+        zh = (item.summary_zh or "").strip()
+    if en and zh:
+        return f"English Summary: {en}\n中文摘要：{zh}"
+    if en:
+        return f"English Summary: {en}"
+    if zh:
+        return f"中文摘要：{zh}"
+    return ""
+
+
 def build_plaintext_digest(
     items: list[ProcessedItem],
     date_str: str,
@@ -72,9 +86,13 @@ def build_plaintext_digest(
             flag = " [更新]" if it.is_update else ""
             lines.append(f"* {it.title}{flag}")
             lines.append(f"  {it.url}")
+            block = _summary_block(it)
             note = ""
             if it.llm_judgement and it.llm_judgement.reason:
                 note = f" | note: {it.llm_judgement.reason[:220]}"
-            lines.append(f"  score={it.final_score:.3f} | {it.summary_zh[:200]}{note}")
+            if block:
+                lines.append(f"  score={it.final_score:.3f} | {block}{note}")
+            else:
+                lines.append(f"  score={it.final_score:.3f}{note}")
             lines.append("")
     return "\n".join(lines).rstrip() + "\n"
