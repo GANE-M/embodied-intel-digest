@@ -212,13 +212,20 @@ def run() -> None:
         x for x in new_items if not (isinstance(x.meta, dict) and bool(x.meta.get("stage1_allowlisted", False)))
     ]
 
+    if config.require_keyword_or_entity_hit:
+        allowlisted_candidates = [
+            x for x in allowlisted_items if x.matched_keywords or x.matched_entities
+        ]
+    else:
+        allowlisted_candidates = allowlisted_items
+
     regular_candidates = [x for x in regular_items if x.final_score >= config.min_final_score]
     if config.require_keyword_or_entity_hit:
         regular_candidates = [
             x for x in regular_candidates if x.matched_keywords or x.matched_entities
         ]
 
-    candidates = allowlisted_items + regular_candidates
+    candidates = allowlisted_candidates + regular_candidates
     candidates.sort(
         key=lambda x: (
             1 if (isinstance(x.meta, dict) and bool(x.meta.get("stage1_allowlisted", False))) else 0,
