@@ -14,6 +14,41 @@
     "category_hint": "research"
   },
   {
+    "pattern": "embodied reasoning",
+    "match_type": "literal",
+    "weight": 0.98,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "embodied reasoner",
+    "match_type": "literal",
+    "weight": 0.98,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "embodied\\s+(robotics|robot)",
+    "match_type": "regex",
+    "weight": 0.97,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "robotics",
+    "match_type": "literal",
+    "weight": 0.97,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
+    "pattern": "robotic",
+    "match_type": "literal",
+    "weight": 0.92,
+    "case_sensitive": false,
+    "category_hint": "research"
+  },
+  {
     "pattern": "humanoid",
     "match_type": "literal",
     "weight": 0.95,

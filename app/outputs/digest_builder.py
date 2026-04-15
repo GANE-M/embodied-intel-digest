@@ -48,6 +48,18 @@ def build_digest_subject(date_str: str) -> str:
     return f"{prefix} | {date_str}"
 
 
+def _display_group_name(category: str) -> str:
+    if category in ("company", "media"):
+        return "News"
+    if category == "research":
+        return "Research"
+    if category == "open_source":
+        return "Open Source"
+    if category == "event":
+        return "Events"
+    return category.title() if category else "News"
+
+
 def build_plaintext_digest(
     items: list[ProcessedItem],
     date_str: str,
@@ -55,16 +67,22 @@ def build_plaintext_digest(
 ) -> str:
     ranked = sorted(items, key=lambda x: digest_rank_key(x), reverse=True)[:top_n]
     context = build_digest_render_context(ranked, date_str, top_n)
+    groups: dict[str, list] = {}
+    for entry, item in zip(context.entries, ranked, strict=False):
+        groups.setdefault(item.category if item.category in constants.CATEGORIES else "media", []).append(entry)
     lines = [
         context.subject,
         "",
     ]
-    for entry in context.entries:
-        title = f"{entry.title}{' [更新]' if entry.is_update else ''}"
-        lines.append(f"Title: {title}")
-        lines.append(f"URL: {entry.url}")
-        lines.append(f"Tag: {entry.tag}")
-        lines.append(f"EN: {entry.summary_en}")
-        lines.append(f"ZH: {entry.summary_zh}")
+    for category in sorted_category_names(groups.keys()):
+        lines.append(f"## {_display_group_name(category)}")
         lines.append("")
+        for entry in groups[category]:
+            title = f"{entry.title}{' [更新]' if entry.is_update else ''}"
+            lines.append(f"Title: {title}")
+            lines.append(f"URL: {entry.url}")
+            lines.append(f"Tag: {entry.tag}")
+            lines.append(f"EN: {entry.summary_en}")
+            lines.append(f"ZH: {entry.summary_zh}")
+            lines.append("")
     return "\n".join(lines).rstrip() + "\n"

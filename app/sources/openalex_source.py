@@ -88,7 +88,7 @@ class OpenAlexSource(BaseSource):
                 "per_page": 25,
                 "filter": ",".join(filter_parts),
             }
-            resp = requests.get(url, params=params, timeout=30)
+            resp = requests.get(url, params=params, timeout=60)
             resp.raise_for_status()
             data = resp.json()
             results: list[RawItem] = []

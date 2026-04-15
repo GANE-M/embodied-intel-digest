@@ -121,6 +121,9 @@ def judge_item(
                 "role": "system",
                 "content": (
                     "You filter high-signal embodied-AI intelligence for a brand team daily digest. "
+                    "Only keep items directly related to embodied intelligence, robotics, robotic manipulation, robot learning, teleoperation, vision-language-action models for robots, world models for robotics, sim2real, or real-world robotics deployment. "
+                    "A high-quality source alone is not a keep reason. Source credibility does not override topic relevance. "
+                    "Reject creative software news, gaming news, general GPU announcements, generic AI infrastructure news, and token cost / AI factory / cloud cost content unless the text clearly and directly concerns robotics or embodied intelligence. "
                     + schema_hint
                 ),
             },

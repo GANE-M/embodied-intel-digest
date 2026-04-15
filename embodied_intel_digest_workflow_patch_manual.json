@@ -1,0 +1,127 @@
+{
+  "document_title": "Embodied Intel Digest GitHub Actions 周期化与环境接线施工文档（workflow-only）",
+  "objective": "仅修改当前 GitHub Actions workflow，使其从 daily 调整为 weekly，正确绑定现有 GitHub Environment，完整接入当前本地运行所需的 Environment secrets / variables，并为未来从服务器恢复与回写 digest_state.json 预留清晰步骤位置。本轮不实现服务器同步，不修改应用代码，不修改 README。",
+  "1_task_scope": [
+    "（1）当前 workflow 仍为 daily schedule，需要改为 weekly schedule。",
+    "（2）当前 workflow 未显式绑定 GitHub Environment，若用户当前使用的是 Environment secrets / Environment variables，则现状无法保证读取完整配置。",
+    "（3）当前 workflow 的 env 接线不完整，缺少 SMTP_USE_SSL、LOOKBACK_HOURS、LLM_API_KEY、LLM_BASE_URL、LLM_MODEL、LLM_TIMEOUT_SEC、LLM_MAX_TOKENS 等本地运行所需变量。",
+    "（4）当前 workflow 仅在 GitHub-hosted runner 的临时磁盘上使用 STATE_DIR，没有为未来从服务器恢复 / 回写 digest_state.json 预留明确步骤。",
+    "（5）本轮继续使用 GitHub-hosted runner，不切换到 self-hosted runner。"
+  ],
+  "2_allowed_files": [
+    ".github/workflows/daily_digest.yml"
+  ],
+  "3_forbidden_files_and_rules": [
+    "README.md、requirements.txt、tests/*、app/*、configs/* 一律禁止修改。",
+    ".github/workflows/* 中除 daily_digest.yml 以外的所有文件禁止修改。",
+    "不得新增、删除或重命名文件。",
+    "不得新增依赖、脚本文件、外部工具链配置。",
+    "不得修改任何应用层 Python 代码、去重逻辑、邮件发送逻辑、存储逻辑。"
+  ],
+  "4_modification_plan": [
+    "先修改 workflow 名称与调度语义，使其从 Daily digest 调整为 Weekly digest，并将 cron 从 daily 改成 weekly。",
+    "再为 digest job 增加 environment 绑定，引用用户当前已存在的 GitHub Environment。",
+    "再补齐 workflow env，按 secrets.* 与 vars.* 正确接入当前本地运行依赖的变量。",
+    "再保留 STORE_TYPE=json 与 STATE_DIR=${{ github.workspace }}/.state，不修改当前 store 方案。",
+    "再增加 Prepare state dir 步骤，确保运行前 state 目录存在。",
+    "最后在 Run digest 前后各预留一个 state 恢复 / 回写接入点，占位清晰，但本轮不实现真实服务器同步。"
+  ],
+  "5_file_specific_requirements": {
+    "5.1_.github/workflows/daily_digest.yml": {
+      "instruction": "仅允许修改此文件。不要把本轮改动拆到其他 workflow 或脚本文件中。",
+      "job_name_and_runner": {
+        "requirement": "继续使用 GitHub-hosted runner。",
+        "runs_on": "ubuntu-latest"
+      },
+      "schedule": {
+        "requirement": "把 current daily schedule 改为 weekly schedule。",
+        "target_behavior": "保持北京时间 08:00 的发送时刻不变，但改为每周一次。",
+        "recommended_cron": "0 0 * * 1",
+        "note": "上述 cron 表示每周一 00:00 UTC，对应北京时间周一 08:00。"
+      },
+      "environment_binding": {
+        "requirement": "为 digest job 显式增加 environment 字段，以便读取 GitHub Environment secrets / variables。",
+        "environment_name": "embodied-intel-digest",
+        "fallback_note": "如果仓库当前真实的 Environment 名称与上面不一致，则以仓库 Settings 中已存在的真实 Environment 名称为准，不得擅自新建其他名称。"
+      },
+      "env_wiring": {
+        "secrets_to_wire": [
+          "EMAIL_TO",
+          "EMAIL_FROM",
+          "SMTP_USERNAME",
+          "SMTP_PASSWORD",
+          "LLM_API_KEY"
+        ],
+        "variables_to_wire": [
+          "EMAIL_SUBJECT_PREFIX",
+          "EMAIL_SUBJECT",
+          "SMTP_HOST",
+          "SMTP_PORT",
+          "SMTP_USE_SSL",
+          "SUMMARY_MODE",
+          "LOOKBACK_HOURS",
+          "LLM_BASE_URL",
+          "LLM_MODEL",
+          "LLM_TIMEOUT_SEC",
+          "LLM_MAX_TOKENS"
+        ],
+        "static_values_to_keep": [
+          "STORE_TYPE=json",
+          "STATE_DIR=${{ github.workspace }}/.state"
+        ],
+        "rules": [
+          "Secrets 必须通过 secrets.* 引用。",
+          "Variables 必须通过 vars.* 引用。",
+          "不得继续把本应来自 vars 的字段写死在 workflow 中，除非本轮文档明确要求保留静态值。",
+          "EMAIL_TO 继续沿用逗号分隔多邮箱形式，不修改代码逻辑。"
+        ]
+      },
+      "steps": {
+        "must_keep": [
+          "actions/checkout@v4",
+          "actions/setup-python@v5",
+          "pip install -r requirements.txt",
+          "python -m app.main",
+          "workflow_dispatch"
+        ],
+        "must_add": [
+          "在 Run digest 之前新增 Prepare state dir 步骤，用于创建 $STATE_DIR。",
+          "在 Run digest 之前新增一个 Restore persisted digest state 占位步骤，作为未来从服务器拉取 digest_state.json 的接入点。",
+          "在 Run digest 之后新增一个 Persist digest state 占位步骤，作为未来把 digest_state.json 回写到服务器的接入点。"
+        ],
+        "placeholder_rules": [
+          "恢复 / 回写步骤本轮只允许作为占位接入点，不得实现真实同步逻辑。",
+          "不得假装本轮已经具备跨次 state 持久化能力。",
+          "占位步骤应保持清晰命名，便于后续服务器接入。"
+        ]
+      }
+    }
+  },
+  "6_logic_loop": [
+    "GitHub schedule/workflow_dispatch -> checkout -> setup-python -> install dependencies -> prepare state dir -> future restore state hook (placeholder only) -> python -m app.main -> future persist state hook (placeholder only)"
+  ],
+  "7_acceptance_criteria": [
+    "daily_digest.yml 是本轮唯一被修改的文件。",
+    "workflow 继续运行在 GitHub-hosted runner（ubuntu-latest）上，不切到 self-hosted runner。",
+    "workflow 名称与调度语义改为 weekly，cron 不再是每日一次。",
+    "digest job 正确声明 environment，能够对接用户当前已有的 GitHub Environment。",
+    "workflow env 中补齐当前本地运行所需的关键变量：SMTP_USE_SSL、LOOKBACK_HOURS、LLM_API_KEY、LLM_BASE_URL、LLM_MODEL、LLM_TIMEOUT_SEC、LLM_MAX_TOKENS 等。",
+    "secrets 使用 secrets.*，variables 使用 vars.*，不得混用。",
+    "EMAIL_TO 保持逗号分隔多邮箱形式，不新增应用层收件人逻辑改造。",
+    "STATE_DIR 仍为 ${{ github.workspace }}/.state，STORE_TYPE 仍为 json。",
+    "workflow 中存在清晰的 state restore / persist 占位步骤，但本轮不实现真实服务器同步。",
+    "不得修改 README、requirements、tests、app、configs 或其他 workflow 文件。"
+  ],
+  "8_do_not_do": [
+    "不要修改 README.md。",
+    "不要修改 requirements.txt。",
+    "不要修改 tests/*。",
+    "不要修改 app/* 或 configs/*。",
+    "不要新增脚本文件、工具文件或额外 workflow。",
+    "不要实现真实的服务器同步逻辑。",
+    "不要把 runner 改成 self-hosted。",
+    "不要改动应用代码来兼容 workflow；本轮只在 workflow 层接线。",
+    "不要顺手更新文档、测试、依赖或其他说明文件。"
+  ],
+  "9_required_cursor_preamble": "本轮任务目标：\n【仅修改 .github/workflows/daily_digest.yml，使 GitHub Actions 从 daily 调整为 weekly，正确绑定 GitHub Environment，完整接入当前本地运行所需的 Environment secrets / variables，并为未来服务器上的 digest_state.json 恢复与回写预留占位步骤。本轮不实现真实服务器同步，不修改应用代码。】\n\n本轮只允许修改以下文件：\n- .github/workflows/daily_digest.yml\n  \n本轮禁止修改以下文件：\n- README.md\n- requirements.txt\n- tests/*\n- app/*\n- configs/*\n- .github/workflows/* 中除 daily_digest.yml 以外的所有文件\n- 以及所有未被列入“允许修改的文件”\n  \n本轮验收标准：\n1. workflow 继续运行在 GitHub-hosted runner 上，不切到 self-hosted runner。\n2. 调度从 daily 改成 weekly，并保留 workflow_dispatch。\n3. 正确绑定当前已存在的 GitHub Environment，并完整接入所需 secrets / variables。\n4. workflow 中存在 state restore / persist 的占位接入点，但本轮不实现真实服务器同步。\n  \n本轮额外约束：\n1. 不得新增依赖。\n2. 不得修改应用代码。\n3. 不得修改去重逻辑本身。\n4. 不得修改 README、tests、requirements、configs 或其他 workflow。\n5. 只允许做 workflow 接线与调度修改，不得伪造“state 已持久化生效”。\n  \n请先输出：\n1. 你理解的任务范围\n2. 允许修改的文件\n3. 禁止修改的文件\n4. 修改计划\n  \n然后再输出最终代码或文件内容。"
+}
