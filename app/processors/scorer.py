@@ -6,10 +6,10 @@ affect scores in this version.
 
 from __future__ import annotations
 
-import math
 import re
 from datetime import datetime, timezone
 
+from app import constants
 from app.models import KeywordRule, ProcessedItem, RawItem, ScoringConfig, TrackedEntity
 from app.utils.text_utils import normalize_whitespace
 
@@ -117,7 +117,11 @@ def compute_entity_score(
     return _clamp01(raw / denom), matched
 
 
-def compute_freshness_score(published_at: datetime, current_time: datetime) -> float:
+def compute_freshness_score(
+    published_at: datetime,
+    current_time: datetime,
+    primary_window_hours: float,
+) -> float:
     now = current_time
     if now.tzinfo is None:
         now = now.replace(tzinfo=timezone.utc)
@@ -126,9 +130,38 @@ def compute_freshness_score(published_at: datetime, current_time: datetime) -> f
         pub = pub.replace(tzinfo=timezone.utc)
     else:
         pub = pub.astimezone(timezone.utc)
+    primary_window_hours = max(1.0, float(primary_window_hours))
     delta_hours = max(0.0, (now - pub).total_seconds() / 3600.0)
-    half_life = 48.0
-    return _clamp01(math.exp(-delta_hours / half_life))
+    grace_window_end_hours = 2.0 * primary_window_hours
+    if delta_hours <= primary_window_hours:
+        return 0.30
+    if delta_hours <= grace_window_end_hours:
+        span = grace_window_end_hours - primary_window_hours
+        if span <= 0:
+            return 0.0
+        ratio = (delta_hours - primary_window_hours) / span
+        return _clamp01(0.15 * (1.0 - ratio))
+    return 0.0
+
+
+def compute_time_bucket(
+    published_at: datetime,
+    current_time: datetime,
+    primary_window_hours: float,
+) -> str:
+    now = current_time
+    if now.tzinfo is None:
+        now = now.replace(tzinfo=timezone.utc)
+    pub = published_at
+    if pub.tzinfo is None:
+        pub = pub.replace(tzinfo=timezone.utc)
+    else:
+        pub = pub.astimezone(timezone.utc)
+    primary_window_hours = max(1.0, float(primary_window_hours))
+    delta_hours = max(0.0, (now - pub).total_seconds() / 3600.0)
+    if delta_hours <= 2.0 * primary_window_hours:
+        return "primary_window" if delta_hours <= primary_window_hours else "grace_window"
+    return "grace_window"
 
 
 def compute_source_score(
@@ -157,13 +190,19 @@ def score_item(
     blob = f"{raw_item.title}\n{raw_item.text}"
     kw_score, kw_hits = compute_keyword_score(blob, keyword_rules)
     ent_score, ent_hits = compute_entity_score(blob, entities)
-    fresh = compute_freshness_score(raw_item.published_at, current_time)
+    primary_window_hours = float(getattr(scoring_config, "primary_window_hours", constants.DEFAULT_LOOKBACK_HOURS))
+    fresh = compute_freshness_score(raw_item.published_at, current_time, primary_window_hours)
     src = compute_source_score(raw_item, scoring_config)
     wk = scoring_config.keyword_weight
     we = scoring_config.entity_weight
     wf = scoring_config.freshness_weight
     ws = scoring_config.source_weight
     final = wk * kw_score + we * ent_score + wf * fresh + ws * src
+    meta = dict(raw_item.meta or {})
+    meta.setdefault(
+        "time_bucket",
+        compute_time_bucket(raw_item.published_at, current_time, primary_window_hours),
+    )
     return ProcessedItem(
         source_type=raw_item.source_type,
         source_name=raw_item.source_name,
@@ -178,7 +217,7 @@ def score_item(
         updated_at=raw_item.updated_at,
         authors=raw_item.authors,
         tags=raw_item.tags,
-        meta=raw_item.meta,
+        meta=meta,
         category="",
         matched_keywords=kw_hits,
         matched_entities=ent_hits,
@@ -187,6 +226,7 @@ def score_item(
         freshness_score=fresh,
         source_score=src,
         final_score=_clamp01(final),
+        summary_en="",
         summary_zh="",
         is_update=False,
     )

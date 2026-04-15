@@ -109,9 +109,14 @@ def judge_item(
         'reason (short English), content_type (one of: official_company_news, '
         "research_paper, open_source_release, media_article, event, other)."
     )
+    time_bucket = str((item.meta or {}).get("time_bucket", "") or "")
+    time_bucket_hint = ""
+    if time_bucket == "grace_window":
+        time_bucket_hint = "This item is in the grace window, so apply a stricter keep standard. "
     user = (
         f"Title: {item.title}\nURL: {item.url}\n"
-        f"Category: {item.category}\nSource: {item.source_type} / {item.source_name}\n\n"
+        f"Category: {item.category}\nSource: {item.source_type} / {item.source_name}\n"
+        f"{time_bucket_hint}\n"
         f"Text:\n{safe_truncate(body, 12_000)}"
     )
     payload: dict[str, Any] = {
@@ -123,7 +128,7 @@ def judge_item(
                     "You filter high-signal embodied-AI intelligence for a brand team daily digest. "
                     "Only keep items directly related to embodied intelligence, robotics, robotic manipulation, robot learning, teleoperation, vision-language-action models for robots, world models for robotics, sim2real, or real-world robotics deployment. "
                     "A high-quality source alone is not a keep reason. Source credibility does not override topic relevance. "
-                    "Reject creative software news, gaming news, general GPU announcements, generic AI infrastructure news, and token cost / AI factory / cloud cost content unless the text clearly and directly concerns robotics or embodied intelligence. "
+                    "Reject gaming news, creative software news, general GPU announcements, generic AI infrastructure news, and token cost / AI factory / consumer announcements unless the text clearly and directly concerns robotics or embodied intelligence. "
                     + schema_hint
                 ),
             },

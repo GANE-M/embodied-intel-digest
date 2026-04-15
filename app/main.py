@@ -185,9 +185,10 @@ def run() -> None:
     config = load_config()
     validate_config(config)
     scoring_config = load_scoring_config()
+    setattr(scoring_config, "primary_window_hours", float(config.lookback_hours))
 
     store: BaseStore = build_store(config)
-    since = compute_since(config.lookback_hours)
+    since = compute_since(config.lookback_hours * 2)
     sources = build_sources(config)
     delivery_pairs = build_email_notifiers(config)
 

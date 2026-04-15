@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import re
 
-from app import constants
 from app.config import AppConfig
 from app.models import ProcessedItem
 
@@ -114,7 +113,7 @@ def select_stage1_candidates(
             continue
 
         if _norm(item.source_name) in priority_source_names:
-            if _item_has_core_signal(item) or _matched_topic_hint(item, config):
+            if item.matched_keywords or _matched_topic_hint(item, config):
                 priority.append(item)
             continue
 
