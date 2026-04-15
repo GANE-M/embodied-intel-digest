@@ -1,28 +1,36 @@
 # Daily digest — install stack must be `pip install -r requirements.txt` only (v1.4).
 # STATE_DIR below is on the ephemeral runner disk unless you add restore/persist steps (see README).
-name: Daily digest
+name: Weekly digest
 
 on:
   schedule:
-    # 08:00 China Standard Time (UTC+8) → 00:00 UTC
-    - cron: "0 0 * * *"
+    # 08:00 China Standard Time (UTC+8) → 00:00 UTC on Mondays
+    - cron: "0 0 * * 1"
   workflow_dispatch:
 
 jobs:
   digest:
     runs-on: ubuntu-latest
+    environment: embodied-intel-digest
     env:
       EMAIL_TO: ${{ secrets.EMAIL_TO }}
       EMAIL_FROM: ${{ secrets.EMAIL_FROM }}
-      EMAIL_SUBJECT_PREFIX: ${{ secrets.EMAIL_SUBJECT_PREFIX }}
-      EMAIL_SUBJECT: ${{ secrets.EMAIL_SUBJECT }}
-      SMTP_HOST: ${{ secrets.SMTP_HOST }}
-      SMTP_PORT: ${{ secrets.SMTP_PORT }}
+      EMAIL_SUBJECT_PREFIX: ${{ vars.EMAIL_SUBJECT_PREFIX }}
+      EMAIL_SUBJECT: ${{ vars.EMAIL_SUBJECT }}
+      SMTP_HOST: ${{ vars.SMTP_HOST }}
+      SMTP_PORT: ${{ vars.SMTP_PORT }}
+      SMTP_USE_SSL: ${{ vars.SMTP_USE_SSL }}
       SMTP_USERNAME: ${{ secrets.SMTP_USERNAME }}
       SMTP_PASSWORD: ${{ secrets.SMTP_PASSWORD }}
+      SUMMARY_MODE: ${{ vars.SUMMARY_MODE }}
+      LOOKBACK_HOURS: ${{ vars.LOOKBACK_HOURS }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      LLM_BASE_URL: ${{ vars.LLM_BASE_URL }}
+      LLM_MODEL: ${{ vars.LLM_MODEL }}
+      LLM_TIMEOUT_SEC: ${{ vars.LLM_TIMEOUT_SEC }}
+      LLM_MAX_TOKENS: ${{ vars.LLM_MAX_TOKENS }}
       STORE_TYPE: json
       STATE_DIR: ${{ github.workspace }}/.state
-      SUMMARY_MODE: template
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@v4
@@ -31,5 +39,11 @@ jobs:
           python-version: "3.12"
       - name: Install dependencies
         run: pip install -r requirements.txt
+      - name: Prepare state dir
+        run: mkdir -p "$STATE_DIR"
+      - name: Restore persisted digest state
+        run: echo "State restore hook reserved for future server sync."
       - name: Run digest
         run: python -m app.main
+      - name: Persist digest state
+        run: echo "State persist hook reserved for future server sync."
