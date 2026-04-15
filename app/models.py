@@ -84,7 +84,9 @@ class FilterRules:
     title_blocklist: list[str] = field(default_factory=list)
     url_blocklist: list[str] = field(default_factory=list)
     source_blocklist: list[str] = field(default_factory=list)
-    source_allowlist: list[str] = field(default_factory=list)
+    absolute_allowlist: list[str] = field(default_factory=list)
+    priority_sources: list[str] = field(default_factory=list)
+    priority_source_topic_hints: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass
@@ -115,8 +117,7 @@ class ProcessedItem(RawItem):
     freshness_score: float = 0.0
     source_score: float = 0.0
     final_score: float = 0.0
-    summary_zh: str = ""
     summary_en: str = ""
-    summary_zh_final: str = ""
+    summary_zh: str = ""
     is_update: bool = False
     llm_judgement: JudgementResult | None = None

@@ -46,14 +46,22 @@
   "source_blocklist": [
     "ROS Discourse"
   ],
-  "source_allowlist": [
-    "Google AI Blog",
-    "NVIDIA Blog",
-    "OpenAI News",
-    "DeepMind Blog",
+  "absolute_allowlist": [
     "huggingface/lerobot",
     "openvla/openvla",
     "isaac-sim/IsaacLab",
     "Physical-Intelligence/openpi"
-  ]
+  ],
+  "priority_sources": [
+    "Google AI Blog",
+    "NVIDIA Blog",
+    "OpenAI News",
+    "DeepMind Blog"
+  ],
+  "priority_source_topic_hints": {
+    "Google AI Blog": ["robot", "robotics", "embodied", "manipulation", "vision-language-action", "vla"],
+    "NVIDIA Blog": ["isaac", "gr00t", "cosmos", "robot", "robotics", "humanoid", "simulation", "manipulation", "teleoperation"],
+    "OpenAI News": ["robot", "robotics", "embodied", "manipulation", "vision-language-action", "vla", "control", "real-world"],
+    "DeepMind Blog": ["robot", "robotics", "embodied", "manipulation", "vision-language-action", "vla", "sim2real"]
+  }
 }

@@ -29,9 +29,6 @@ class AppConfig:
     summary_mode: str
     llm_api_key: str | None
     llm_base_url: str | None
-    llm_model: str
-    llm_timeout_sec: float
-    llm_max_tokens: int
     store_type: str
     state_dir: Path | None
     database_url: str | None
@@ -71,16 +68,6 @@ def load_config() -> AppConfig:
     if not str(llm_url or "").strip():
         llm_url = None
 
-    llm_model = (os.getenv("LLM_MODEL", "deepseek-chat") or "deepseek-chat").strip()
-    try:
-        llm_timeout_sec = float(os.getenv("LLM_TIMEOUT_SEC", "75"))
-    except ValueError:
-        llm_timeout_sec = 75.0
-    try:
-        llm_max_tokens = int(os.getenv("LLM_MAX_TOKENS", "1024"))
-    except ValueError:
-        llm_max_tokens = 1024
-
     min_final = float(os.getenv("MIN_FINAL_SCORE", str(constants.DEFAULT_MIN_FINAL_SCORE)))
     require_hit = (os.getenv("REQUIRE_KEYWORD_OR_ENTITY_HIT", "true") or "").lower() in (
         "1",
@@ -118,9 +105,6 @@ def load_config() -> AppConfig:
         summary_mode=summary_mode,
         llm_api_key=llm_key,
         llm_base_url=llm_url,
-        llm_model=llm_model,
-        llm_timeout_sec=llm_timeout_sec,
-        llm_max_tokens=llm_max_tokens,
         store_type=store_type,
         state_dir=state_dir,
         database_url=os.getenv("DATABASE_URL") or None,
@@ -269,11 +253,20 @@ def load_filter_rules(configs_dir: Path) -> FilterRules:
             return []
         return [str(x).strip() for x in raw if str(x).strip()]
 
+    hints_raw = data.get("priority_source_topic_hints", {})
+    hints: dict[str, list[str]] = {}
+    if isinstance(hints_raw, dict):
+        for key, value in hints_raw.items():
+            if isinstance(value, list):
+                hints[str(key).strip()] = [str(x).strip() for x in value if str(x).strip()]
+
     return FilterRules(
         title_blocklist=_str_list("title_blocklist"),
         url_blocklist=_str_list("url_blocklist"),
         source_blocklist=_str_list("source_blocklist"),
-        source_allowlist=_str_list("source_allowlist"),
+        absolute_allowlist=_str_list("absolute_allowlist"),
+        priority_sources=_str_list("priority_sources"),
+        priority_source_topic_hints=hints,
     )
 
 

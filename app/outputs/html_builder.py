@@ -6,15 +6,8 @@ import html
 import os
 
 from app.models import ProcessedItem
-from app.outputs.digest_builder import digest_rank_key, group_items, sorted_category_names
-
-
-def _summary_block(item: ProcessedItem) -> tuple[str, str]:
-    en = (getattr(item, "summary_en", "") or "").strip()
-    zh = (getattr(item, "summary_zh_final", "") or "").strip()
-    if not en and not zh:
-        zh = (item.summary_zh or "").strip()
-    return en, zh
+from app.outputs.digest_builder import digest_rank_key
+from app.outputs.render_context import build_digest_render_context
 
 
 def build_html_digest(
@@ -23,7 +16,7 @@ def build_html_digest(
     top_n: int,
 ) -> str:
     ranked = sorted(items, key=lambda x: digest_rank_key(x), reverse=True)[:top_n]
-    grouped = group_items(ranked)
+    context = build_digest_render_context(ranked, date_str, top_n)
     prefix = (
         os.getenv("EMAIL_SUBJECT_PREFIX")
         or os.getenv("EMAIL_SUBJECT")
@@ -32,30 +25,17 @@ def build_html_digest(
     parts: list[str] = [
         "<html><body>",
         f"<h1>{html.escape(prefix)} — {html.escape(date_str)}</h1>",
-        f"<p>Top {len(ranked)} items.</p>",
     ]
-    for cat in sorted_category_names(grouped.keys()):
-        parts.append(f"<h2>{html.escape(cat)}</h2><ul>")
-        for it in grouped[cat]:
-            title = html.escape(it.title)
-            if it.is_update:
-                title += " [更新]"
-            url = html.escape(it.url, quote=True)
-            en, zh = _summary_block(it)
-            note = ""
-            if it.llm_judgement and it.llm_judgement.reason:
-                note = "<br/><span style=\"font-size:0.85em;opacity:0.85\">" + html.escape(
-                    it.llm_judgement.reason[:400],
-                ) + "</span>"
-            summary_parts = []
-            if en:
-                summary_parts.append(f"<strong>English Summary:</strong> {html.escape(en)}")
-            if zh:
-                summary_parts.append(f"<strong>中文摘要：</strong> {html.escape(zh)}")
-            summ = "<br/>".join(summary_parts)
-            parts.append(
-                f'<li><a href="{url}">{title}</a><br/><span style="font-size:0.9em">{summ}</span>{note}</li>',
-            )
-        parts.append("</ul>")
+    for entry in context.entries:
+        title = html.escape(entry.title)
+        if entry.is_update:
+            title += " [更新]"
+        parts.append("<div style='margin:0 0 16px 0'>")
+        parts.append(f"<div>Title: {title}</div>")
+        parts.append(f"<div>URL: <a href=\"{html.escape(entry.url, quote=True)}\">{html.escape(entry.url)}</a></div>")
+        parts.append(f"<div>Tag: {html.escape(entry.tag)}</div>")
+        parts.append(f"<div>EN: {html.escape(entry.summary_en)}</div>")
+        parts.append(f"<div>ZH: {html.escape(entry.summary_zh)}</div>")
+        parts.append("</div>")
     parts.append("</body></html>")
     return "\n".join(parts)

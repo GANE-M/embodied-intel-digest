@@ -27,8 +27,9 @@ from app.outputs.review_exporter import export_review_runs
 from app.processors.cleaner import clean_raw_item
 from app.processors.classifier import classify_item
 from app.processors.deduper import dedupe_items, filter_new_items
+from app.processors.llm_judge import build_deepseek_bilingual_summary
 from app.processors.scorer import score_item
-from app.processors.stage1_filter import passes_stage1_filters
+from app.processors.stage1_selector import select_stage1_candidates
 from app.processors.stage2_selector import (
     STAGE2_FAILED,
     STAGE2_SUCCESS_EMPTY,
@@ -65,7 +66,6 @@ def build_sources(config: AppConfig) -> list[BaseSource]:
         for x in os.getenv("ARXIV_CATEGORIES", "cs.RO").split(",")
         if x.strip()
     ]
-    # arXiv papers: use ArxivSource only (not RSS feeds pointing at arxiv.org/rss/...).
     sources: list[BaseSource] = [
         ArxivSource(categories, literal_keywords or ["robotics"]),
         OpenAlexSource(literal_keywords or ["embodied intelligence"], []),
@@ -169,42 +169,6 @@ def process_items(
     return processed
 
 
-
-def _generate_final_bilingual_summaries(
-    items: list[ProcessedItem],
-    config: AppConfig,
-    log,
-) -> None:
-    from app.processors.llm_judge import build_deepseek_bilingual_summary
-
-    api_key = (config.llm_api_key or "").strip()
-    base_url = (config.llm_base_url or "").strip()
-    if not api_key or not base_url:
-        log.warning("bilingual summary skipped: DeepSeek config missing")
-        return
-
-    for item in items:
-        try:
-            summary_en, summary_zh_final = build_deepseek_bilingual_summary(
-                item,
-                api_key=api_key,
-                base_url=base_url,
-                model=config.llm_model,
-                timeout_sec=config.llm_timeout_sec,
-                max_tokens=config.llm_max_tokens,
-            )
-            if summary_en or summary_zh_final:
-                item.summary_en = summary_en
-                item.summary_zh_final = summary_zh_final
-            else:
-                if not item.summary_zh_final:
-                    item.summary_zh_final = item.summary_zh
-        except Exception as exc:  # noqa: BLE001
-            log.warning("bilingual summary failed for %s: %s", (item.title or "")[:120], exc)
-            if not item.summary_zh_final:
-                item.summary_zh_final = item.summary_zh
-
-
 def build_digest_payload(
     items: list[ProcessedItem],
     date_str: str,
@@ -238,40 +202,25 @@ def run() -> None:
 
     new_items = filter_new_items(processed, store)
     new_items.sort(key=lambda x: x.final_score, reverse=True)
-    new_items = [x for x in new_items if passes_stage1_filters(x, config.filter_rules)]
 
-    allowlisted_items = [
-        x for x in new_items if isinstance(x.meta, dict) and bool(x.meta.get("stage1_allowlisted", False))
-    ]
-    regular_items = [
-        x for x in new_items if not (isinstance(x.meta, dict) and bool(x.meta.get("stage1_allowlisted", False)))
-    ]
-
-    if config.require_keyword_or_entity_hit:
-        allowlisted_candidates = [
-            x for x in allowlisted_items if x.matched_keywords or x.matched_entities
-        ]
-    else:
-        allowlisted_candidates = allowlisted_items
-
-    regular_candidates = [x for x in regular_items if x.final_score >= config.min_final_score]
-    if config.require_keyword_or_entity_hit:
-        regular_candidates = [
-            x for x in regular_candidates if x.matched_keywords or x.matched_entities
-        ]
-
-    candidates = allowlisted_candidates + regular_candidates
-    candidates.sort(
-        key=lambda x: (
-            1 if (isinstance(x.meta, dict) and bool(x.meta.get("stage1_allowlisted", False))) else 0,
-            x.final_score,
-        ),
-        reverse=True,
-    )
+    candidates = select_stage1_candidates(new_items, config)
 
     to_send, stage2_status, stage2_shortlist = select_stage2_items(candidates, config, log)
 
-    _generate_final_bilingual_summaries(to_send, config, log)
+    if to_send:
+        api_key = (config.llm_api_key or "").strip()
+        base_url = (config.llm_base_url or "").strip()
+        if api_key and base_url:
+            for item in to_send:
+                summary_en, summary_zh = build_deepseek_bilingual_summary(
+                    item,
+                    api_key=api_key,
+                    base_url=base_url,
+                )
+                if summary_en:
+                    item.summary_en = summary_en
+                if summary_zh:
+                    item.summary_zh = summary_zh
 
     export_review_runs(
         config.state_dir,
@@ -289,9 +238,6 @@ def run() -> None:
         status = constants.RUN_STATUS_PARTIAL
     delivery_failures = 0
 
-    # Digest delivery: each DeliveryTarget gets the same payload over its own SMTP.
-    # mark_seen: persist when *at least one* target succeeds, so a partial outage does
-    # not cause duplicate digests on the next run for recipients who already received mail.
     try:
         if to_send:
             subject, body_text, body_html = build_digest_payload(

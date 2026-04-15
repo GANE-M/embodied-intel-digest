@@ -33,7 +33,7 @@ RUN_STATUSES: tuple[str, ...] = (
 STORE_TYPES_JSON: str = "json"
 STORE_TYPES_UNSUPPORTED: tuple[str, ...] = ("sqlite", "postgres", "supabase")
 
-DEFAULT_TOP_N: int = 20
+DEFAULT_TOP_N: int = 50
 DEFAULT_LOOKBACK_HOURS: int = 24
 DEFAULT_SUMMARY_MODE: str = "template"
 DEFAULT_MIN_FINAL_SCORE: float = 0.23
