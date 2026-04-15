@@ -5,7 +5,7 @@ name: Weekly digest
 on:
   schedule:
     # 08:00 China Standard Time (UTC+8) → 00:00 UTC on Mondays
-    - cron: "0 0 * * 1"
+    - cron: "0 0 * * 6"
   workflow_dispatch:
 
 jobs:
